@@ -231,6 +231,30 @@ export default function Clientes() {
     }
   }
 
+  const formatPhone = (value: string) => {
+    const numbers = value.replace(/\D/g, '')
+    
+    if (numbers.length <= 10) {
+      return numbers.replace(/(\d{2})(\d{4})(\d{0,4})/, (_, ddd, first, second) => {
+        if (second) return `(${ddd}) ${first}-${second}`
+        if (first) return `(${ddd}) ${first}`
+        if (ddd) return `(${ddd}`
+        return numbers
+      })
+    }
+    
+    return numbers.replace(/(\d{2})(\d{5})(\d{0,4})/, (_, ddd, first, second) => {
+      if (second) return `(${ddd}) ${first}-${second}`
+      if (first) return `(${ddd}) ${first}`
+      return numbers
+    })
+  }
+
+  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const formatted = formatPhone(e.target.value)
+    setFormData({...formData, telefone: formatted})
+  }
+
   const handleNewClient = () => {
     setEditingClient(null)
     setFormData({
@@ -307,8 +331,9 @@ export default function Clientes() {
                   <Input
                     id="telefone"
                     value={formData.telefone}
-                    onChange={(e) => setFormData({...formData, telefone: e.target.value})}
+                    onChange={handlePhoneChange}
                     placeholder="(11) 99999-9999"
+                    maxLength={15}
                     required
                   />
                 </div>
