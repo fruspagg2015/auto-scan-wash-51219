@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -8,40 +8,46 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { Plus, Search, Edit, Trash2, Phone, Mail, MapPin } from "lucide-react"
+import { Plus, Search, Edit, Trash2, Phone, Mail, MapPin, Loader2 } from "lucide-react"
+import { supabase } from "@/integrations/supabase/client"
+import { useAuth } from "@/contexts/AuthContext"
+import { useToast } from "@/hooks/use-toast"
+import { z } from "zod"
 
-// Mock data
-const mockClientes = [
-  {
-    id: 1,
-    nome: "João Silva",
-    telefone: "(11) 99999-9999",
-    email: "joao.silva@email.com",
-    endereco: "Rua das Flores, 123",
-    cidade: "São Paulo",
-    tipo: "Pessoa Física",
-    ultimaVisita: "2024-01-15",
-    totalGasto: "R$ 450,00",
-    status: "Ativo"
-  },
-  {
-    id: 2,
-    nome: "Empresa ABC Ltda",
-    telefone: "(11) 88888-8888",
-    email: "contato@empresaabc.com",
-    endereco: "Av. Paulista, 1000",
-    cidade: "São Paulo", 
-    tipo: "Pessoa Jurídica",
-    ultimaVisita: "2024-01-20",
-    totalGasto: "R$ 1.200,00",
-    status: "Ativo"
-  }
-]
+interface Client {
+  id: string
+  company_id: string
+  nome: string
+  tipo: string
+  telefone: string
+  email?: string
+  endereco?: string
+  cidade?: string
+  observacoes?: string
+  status: string
+  created_at: string
+  updated_at: string
+}
+
+const clientSchema = z.object({
+  nome: z.string().trim().min(1, "Nome é obrigatório").max(100, "Nome deve ter no máximo 100 caracteres"),
+  telefone: z.string().trim().min(1, "Telefone é obrigatório").max(20, "Telefone deve ter no máximo 20 caracteres"),
+  email: z.string().trim().email("Email inválido").max(255, "Email deve ter no máximo 255 caracteres").optional().or(z.literal("")),
+  endereco: z.string().trim().max(255, "Endereço deve ter no máximo 255 caracteres").optional(),
+  cidade: z.string().trim().max(100, "Cidade deve ter no máximo 100 caracteres").optional(),
+  tipo: z.enum(["Pessoa Física", "Pessoa Jurídica"]),
+  observacoes: z.string().trim().max(500, "Observações devem ter no máximo 500 caracteres").optional(),
+})
 
 export default function Clientes() {
+  const { currentCompanyId } = useAuth()
+  const { toast } = useToast()
+  const [clients, setClients] = useState<Client[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
   const [isDialogOpen, setIsDialogOpen] = useState(false)
-  const [editingClient, setEditingClient] = useState<any>(null)
+  const [editingClient, setEditingClient] = useState<Client | null>(null)
   const [formData, setFormData] = useState({
     nome: "",
     telefone: "",
@@ -52,44 +58,177 @@ export default function Clientes() {
     observacoes: ""
   })
 
-  const filteredClientes = mockClientes.filter(cliente =>
+  const loadClients = async () => {
+    if (!currentCompanyId) {
+      setIsLoading(false)
+      return
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('clients')
+        .select('*')
+        .eq('company_id', currentCompanyId)
+        .order('created_at', { ascending: false })
+
+      if (error) throw error
+      setClients(data || [])
+    } catch (error: any) {
+      console.error('Error loading clients:', error)
+      toast({
+        title: "Erro ao carregar clientes",
+        description: error.message || "Não foi possível carregar a lista de clientes",
+        variant: "destructive"
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadClients()
+  }, [currentCompanyId])
+
+  const filteredClientes = clients.filter(cliente =>
     cliente.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    cliente.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (cliente.email && cliente.email.toLowerCase().includes(searchTerm.toLowerCase())) ||
     cliente.telefone.includes(searchTerm)
   )
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (editingClient) {
-      console.log("Cliente editado:", { ...formData, id: editingClient.id })
-    } else {
-      console.log("Cliente cadastrado:", formData)
+    
+    if (!currentCompanyId) {
+      toast({
+        title: "Erro",
+        description: "Empresa não identificada",
+        variant: "destructive"
+      })
+      return
     }
-    setIsDialogOpen(false)
-    setEditingClient(null)
-    setFormData({
-      nome: "",
-      telefone: "",
-      email: "",
-      endereco: "",
-      cidade: "",
-      tipo: "Pessoa Física",
-      observacoes: ""
-    })
+
+    setIsSubmitting(true)
+
+    try {
+      // Validar dados do formulário
+      const validatedData = clientSchema.parse(formData)
+
+      if (editingClient) {
+        // Update existing client
+        const { error } = await supabase
+          .from('clients')
+          .update({
+            ...validatedData,
+            email: validatedData.email || null,
+            endereco: validatedData.endereco || null,
+            cidade: validatedData.cidade || null,
+            observacoes: validatedData.observacoes || null,
+          })
+          .eq('id', editingClient.id)
+          .eq('company_id', currentCompanyId)
+
+        if (error) throw error
+
+        toast({
+          title: "Cliente atualizado",
+          description: "Os dados do cliente foram atualizados com sucesso"
+        })
+      } else {
+        // Insert new client
+        const { error } = await supabase
+          .from('clients')
+          .insert({
+            company_id: currentCompanyId,
+            ...validatedData,
+            email: validatedData.email || null,
+            endereco: validatedData.endereco || null,
+            cidade: validatedData.cidade || null,
+            observacoes: validatedData.observacoes || null,
+            status: 'Ativo'
+          })
+
+        if (error) throw error
+
+        toast({
+          title: "Cliente cadastrado",
+          description: "Cliente adicionado com sucesso"
+        })
+      }
+
+      setIsDialogOpen(false)
+      setEditingClient(null)
+      setFormData({
+        nome: "",
+        telefone: "",
+        email: "",
+        endereco: "",
+        cidade: "",
+        tipo: "Pessoa Física",
+        observacoes: ""
+      })
+      loadClients()
+    } catch (error: any) {
+      console.error('Error saving client:', error)
+      
+      if (error instanceof z.ZodError) {
+        toast({
+          title: "Erro de validação",
+          description: error.issues[0]?.message || "Dados inválidos",
+          variant: "destructive"
+        })
+      } else {
+        toast({
+          title: "Erro ao salvar cliente",
+          description: error.message || "Não foi possível salvar o cliente",
+          variant: "destructive"
+        })
+      }
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
-  const handleEdit = (cliente: any) => {
+  const handleEdit = (cliente: Client) => {
     setEditingClient(cliente)
     setFormData({
       nome: cliente.nome,
       telefone: cliente.telefone,
-      email: cliente.email,
-      endereco: cliente.endereco,
-      cidade: cliente.cidade,
+      email: cliente.email || "",
+      endereco: cliente.endereco || "",
+      cidade: cliente.cidade || "",
       tipo: cliente.tipo,
       observacoes: cliente.observacoes || ""
     })
     setIsDialogOpen(true)
+  }
+
+  const handleDelete = async (clientId: string) => {
+    if (!confirm("Tem certeza que deseja excluir este cliente?")) {
+      return
+    }
+
+    try {
+      const { error } = await supabase
+        .from('clients')
+        .delete()
+        .eq('id', clientId)
+        .eq('company_id', currentCompanyId)
+
+      if (error) throw error
+
+      toast({
+        title: "Cliente excluído",
+        description: "Cliente removido com sucesso"
+      })
+      loadClients()
+    } catch (error: any) {
+      console.error('Error deleting client:', error)
+      toast({
+        title: "Erro ao excluir cliente",
+        description: error.message || "Não foi possível excluir o cliente",
+        variant: "destructive"
+      })
+    }
   }
 
   const handleNewClient = () => {
@@ -104,6 +243,14 @@ export default function Clientes() {
       observacoes: ""
     })
     setIsDialogOpen(true)
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    )
   }
 
   return (
@@ -206,10 +353,17 @@ export default function Clientes() {
               </div>
               
               <div className="flex gap-2 pt-4">
-                <Button type="submit" className="flex-1">
-                  {editingClient ? "Atualizar Cliente" : "Cadastrar Cliente"}
+                <Button type="submit" className="flex-1" disabled={isSubmitting}>
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Salvando...
+                    </>
+                  ) : (
+                    editingClient ? "Atualizar Cliente" : "Cadastrar Cliente"
+                  )}
                 </Button>
-                <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
+                <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)} disabled={isSubmitting}>
                   Cancelar
                 </Button>
               </div>
@@ -243,7 +397,7 @@ export default function Clientes() {
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Total Clientes</p>
-                <p className="text-lg font-semibold">{mockClientes.length}</p>
+                <p className="text-lg font-semibold">{clients.length}</p>
               </div>
             </div>
           </CardContent>
@@ -257,7 +411,7 @@ export default function Clientes() {
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Ativos</p>
-                <p className="text-lg font-semibold">{mockClientes.filter(c => c.status === "Ativo").length}</p>
+                <p className="text-lg font-semibold">{clients.filter(c => c.status === "Ativo").length}</p>
               </div>
             </div>
           </CardContent>
@@ -271,7 +425,7 @@ export default function Clientes() {
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Pessoa Física</p>
-                <p className="text-lg font-semibold">{mockClientes.filter(c => c.tipo === "Pessoa Física").length}</p>
+                <p className="text-lg font-semibold">{clients.filter(c => c.tipo === "Pessoa Física").length}</p>
               </div>
             </div>
           </CardContent>
@@ -285,7 +439,7 @@ export default function Clientes() {
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Pessoa Jurídica</p>
-                <p className="text-lg font-semibold">{mockClientes.filter(c => c.tipo === "Pessoa Jurídica").length}</p>
+                <p className="text-lg font-semibold">{clients.filter(c => c.tipo === "Pessoa Jurídica").length}</p>
               </div>
             </div>
           </CardContent>
@@ -309,47 +463,51 @@ export default function Clientes() {
                   <TableHead>Tipo</TableHead>
                   <TableHead>Contato</TableHead>
                   <TableHead>Cidade</TableHead>
-                  <TableHead>Última Visita</TableHead>
-                  <TableHead>Total Gasto</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredClientes.map((cliente) => (
-                  <TableRow key={cliente.id}>
-                    <TableCell className="font-medium">{cliente.nome}</TableCell>
-                    <TableCell>
-                      <Badge variant={cliente.tipo === "Pessoa Física" ? "secondary" : "outline"}>
-                        {cliente.tipo}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <div className="text-sm">
-                        <div>{cliente.telefone}</div>
-                        <div className="text-muted-foreground">{cliente.email}</div>
-                      </div>
-                    </TableCell>
-                    <TableCell>{cliente.cidade}</TableCell>
-                    <TableCell>{cliente.ultimaVisita}</TableCell>
-                    <TableCell className="font-medium text-green-600">{cliente.totalGasto}</TableCell>
-                    <TableCell>
-                      <Badge variant={cliente.status === "Ativo" ? "default" : "secondary"}>
-                        {cliente.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex gap-2">
-                        <Button variant="ghost" size="sm" onClick={() => handleEdit(cliente)}>
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button variant="ghost" size="sm">
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
+                {filteredClientes.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                      Nenhum cliente encontrado
                     </TableCell>
                   </TableRow>
-                ))}
+                ) : (
+                  filteredClientes.map((cliente) => (
+                    <TableRow key={cliente.id}>
+                      <TableCell className="font-medium">{cliente.nome}</TableCell>
+                      <TableCell>
+                        <Badge variant={cliente.tipo === "Pessoa Física" ? "secondary" : "outline"}>
+                          {cliente.tipo}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="text-sm">
+                          <div>{cliente.telefone}</div>
+                          {cliente.email && <div className="text-muted-foreground">{cliente.email}</div>}
+                        </div>
+                      </TableCell>
+                      <TableCell>{cliente.cidade || "-"}</TableCell>
+                      <TableCell>
+                        <Badge variant={cliente.status === "Ativo" ? "default" : "secondary"}>
+                          {cliente.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex gap-2">
+                          <Button variant="ghost" size="sm" onClick={() => handleEdit(cliente)}>
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button variant="ghost" size="sm" onClick={() => handleDelete(cliente.id)}>
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
               </TableBody>
             </Table>
           </div>
