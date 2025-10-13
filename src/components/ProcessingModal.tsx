@@ -30,23 +30,9 @@ export const ProcessingModal: React.FC<ProcessingModalProps> = ({
   const [currentStep, setCurrentStep] = useState(0);
   const [steps, setSteps] = useState<ProcessingStep[]>([
     {
-      id: 'ocr',
-      title: 'Escaneando placa',
-      description: 'Analisando a imagem capturada...',
-      icon: <Camera className="h-5 w-5" />,
-      status: 'pending'
-    },
-    {
-      id: 'local',
-      title: 'Consultando cadastro',
-      description: 'Verificando dados no sistema...',
-      icon: <Database className="h-5 w-5" />,
-      status: 'pending'
-    },
-    {
       id: 'api',
-      title: 'Consultando dados do veículo',
-      description: 'Buscando informações externas...',
+      title: 'Analisando imagem',
+      description: 'Processando foto e consultando dados...',
       icon: <Globe className="h-5 w-5" />,
       status: 'pending'
     },
@@ -64,142 +50,95 @@ export const ProcessingModal: React.FC<ProcessingModalProps> = ({
 
     const processSteps = async () => {
       try {
-        // Step 1: OCR da placa
+        // Etapa única: Consulta n8n com imagem
         setSteps(prev => prev.map((step, index) => 
           index === 0 ? { ...step, status: 'processing' } : step
         ));
         
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        const placaDetectada = "ABC-1234"; // Mock OCR result
+        const response = await fetch('https://api04.frconnect.com.br/webhook/frsend.consultar.placa', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ 
+            image: capturedImage
+          })
+        });
         
-        setSteps(prev => prev.map((step, index) => 
-          index === 0 ? { ...step, status: 'completed' } : step
-        ));
-        setCurrentStep(1);
-
-        // Step 2: Consulta no cadastro local
-        setSteps(prev => prev.map((step, index) => 
-          index === 1 ? { ...step, status: 'processing' } : step
-        ));
-        
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        
-        // Simular se encontrou no cadastro local
-        const encontrouLocal = Math.random() > 0.5;
-        
-        if (encontrouLocal) {
-          // Encontrou tudo no cadastro local
-          setSteps(prev => prev.map((step, index) => 
-            index === 1 ? { ...step, status: 'completed' } : 
-            index > 1 ? { ...step, status: 'completed' } : step
-          ));
-          
-          const mockResult = {
-            placa: placaDetectada,
-            modelo: "Civic",
-            marca: "Honda",
-            ano: "2022",
-            cor: "Prata",
-            imagem: capturedImage,
-            hora_chegada: new Date().toLocaleTimeString('pt-BR', { 
-              hour: '2-digit', 
-              minute: '2-digit' 
-            }),
-            cliente: {
-              nome: "João Silva",
-              telefone: "(11) 99999-1234",
-              email: "joao.silva@email.com",
-              cadastrado: true
-            },
-            fonte: 'cadastro_local'
-          };
-          
-          setTimeout(() => onComplete(mockResult), 1000);
-          return;
+        if (!response.ok) {
+          throw new Error('Erro na consulta da API');
         }
-
-        setSteps(prev => prev.map((step, index) => 
-          index === 1 ? { ...step, status: 'completed' } : step
-        ));
-        setCurrentStep(2);
-
-        // Step 3: Consulta API externa (n8n)
-        setSteps(prev => prev.map((step, index) => 
-          index === 2 ? { ...step, status: 'processing' } : step
-        ));
         
-        try {
-          const response = await fetch('https://api04.frconnect.com.br/webhook/frsend.consultar.placa', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ placa: placaDetectada })
-          });
+        const apiData = await response.json();
+        console.log("Resposta do n8n:", apiData);
+        
+        if (apiData && apiData.length > 0) {
+          const resultado = apiData[0];
+          const placaDetectada = resultado.placa;
+          const veiculo = resultado.veiculo;
           
-          if (!response.ok) {
-            throw new Error('Erro na consulta da API');
+          if (!placaDetectada) {
+            throw new Error('Placa não identificada na imagem');
           }
           
-          const apiData = await response.json();
-          console.log("Dados obtidos da API n8n:", apiData);
-          
-          if (apiData && apiData.length > 0 && apiData[0].veiculo) {
-            const veiculo = apiData[0].veiculo;
-            
-            setSteps(prev => prev.map((step, index) => 
-              index === 2 ? { ...step, status: 'completed' } : step
-            ));
-            setCurrentStep(3);
-
-            // Step 4: Solicitar dados do cliente
-            setSteps(prev => prev.map((step, index) => 
-              index === 3 ? { ...step, status: 'processing' } : step
-            ));
-
-            const vehicleData = {
-              placa: placaDetectada,
-              modelo: veiculo.modelo || veiculo.submodelo || '',
-              marca: veiculo.marca || '',
-              ano: veiculo.ano || veiculo.anoModelo || '',
-              cor: veiculo.cor || '',
-              imagem: capturedImage,
-              hora_chegada: new Date().toLocaleTimeString('pt-BR', { 
-                hour: '2-digit', 
-                minute: '2-digit' 
-              }),
-              municipio: veiculo.municipio || '',
-              uf: veiculo.uf || '',
-              fonte: 'api_n8n'
-            };
-
-            onRequestClientData(vehicleData);
-          } else {
-            throw new Error('Dados inválidos retornados da API');
-          }
-        } catch (error) {
-          console.error('Erro ao consultar API n8n:', error);
-          
-          // Não encontrou ou erro na API
+          // Marca primeira etapa como completa
           setSteps(prev => prev.map((step, index) => 
-            index === 2 ? { ...step, status: 'error' } : step
+            index === 0 ? { ...step, status: 'completed' } : step
           ));
-          
+          setCurrentStep(1);
+
+          // Etapa 2: Solicitar dados do cliente
+          setSteps(prev => prev.map((step, index) => 
+            index === 1 ? { ...step, status: 'processing' } : step
+          ));
+
           const vehicleData = {
             placa: placaDetectada,
+            modelo: veiculo?.modelo || veiculo?.submodelo || '',
+            marca: veiculo?.marca || '',
+            ano: veiculo?.ano || veiculo?.anoModelo || '',
+            cor: veiculo?.cor || '',
+            municipio: veiculo?.municipio || '',
+            uf: veiculo?.uf || '',
             imagem: capturedImage,
             hora_chegada: new Date().toLocaleTimeString('pt-BR', { 
               hour: '2-digit', 
               minute: '2-digit' 
             }),
-            fonte: 'manual'
+            fonte: 'api_n8n'
           };
 
           onRequestClientData(vehicleData);
+        } else {
+          throw new Error('Resposta inválida da API');
         }
-
       } catch (error) {
-        console.error('Erro no processamento:', error);
+        console.error('Erro ao processar imagem:', error);
+        
+        // Marcar como erro
+        setSteps(prev => prev.map((step, index) => 
+          index === 0 ? { ...step, status: 'error' } : step
+        ));
+        
+        // Permitir entrada manual
+        const vehicleData = {
+          placa: "NÃO IDENTIFICADA",
+          imagem: capturedImage,
+          hora_chegada: new Date().toLocaleTimeString('pt-BR', { 
+            hour: '2-digit', 
+            minute: '2-digit' 
+          }),
+          fonte: 'manual'
+        };
+
+        // Após 2 segundos, abrir modal de dados do cliente
+        setTimeout(() => {
+          setCurrentStep(1);
+          setSteps(prev => prev.map((step, index) => 
+            index === 1 ? { ...step, status: 'processing' } : step
+          ));
+          onRequestClientData(vehicleData);
+        }, 2000);
       }
     };
 
