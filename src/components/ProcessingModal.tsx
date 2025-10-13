@@ -123,43 +123,64 @@ export const ProcessingModal: React.FC<ProcessingModalProps> = ({
         ));
         setCurrentStep(2);
 
-        // Step 3: Consulta API externa
+        // Step 3: Consulta API externa (n8n)
         setSteps(prev => prev.map((step, index) => 
           index === 2 ? { ...step, status: 'processing' } : step
         ));
         
-        await new Promise(resolve => setTimeout(resolve, 1500));
-        
-        const encontrouAPI = Math.random() > 0.3;
-        
-        if (encontrouAPI) {
-          setSteps(prev => prev.map((step, index) => 
-            index === 2 ? { ...step, status: 'completed' } : step
-          ));
-          setCurrentStep(3);
+        try {
+          const response = await fetch('https://api04.frconnect.com.br/webhook/frsend.consultar.placa', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ placa: placaDetectada })
+          });
+          
+          if (!response.ok) {
+            throw new Error('Erro na consulta da API');
+          }
+          
+          const apiData = await response.json();
+          console.log("Dados obtidos da API n8n:", apiData);
+          
+          if (apiData && apiData.length > 0 && apiData[0].veiculo) {
+            const veiculo = apiData[0].veiculo;
+            
+            setSteps(prev => prev.map((step, index) => 
+              index === 2 ? { ...step, status: 'completed' } : step
+            ));
+            setCurrentStep(3);
 
-          // Step 4: Solicitar dados do cliente
-          setSteps(prev => prev.map((step, index) => 
-            index === 3 ? { ...step, status: 'processing' } : step
-          ));
+            // Step 4: Solicitar dados do cliente
+            setSteps(prev => prev.map((step, index) => 
+              index === 3 ? { ...step, status: 'processing' } : step
+            ));
 
-          const vehicleData = {
-            placa: placaDetectada,
-            modelo: "Onix",
-            marca: "Chevrolet",
-            ano: "2023",
-            cor: "Preto",
-            imagem: capturedImage,
-            hora_chegada: new Date().toLocaleTimeString('pt-BR', { 
-              hour: '2-digit', 
-              minute: '2-digit' 
-            }),
-            fonte: 'api_externa'
-          };
+            const vehicleData = {
+              placa: placaDetectada,
+              modelo: veiculo.modelo || veiculo.submodelo || '',
+              marca: veiculo.marca || '',
+              ano: veiculo.ano || veiculo.anoModelo || '',
+              cor: veiculo.cor || '',
+              imagem: capturedImage,
+              hora_chegada: new Date().toLocaleTimeString('pt-BR', { 
+                hour: '2-digit', 
+                minute: '2-digit' 
+              }),
+              municipio: veiculo.municipio || '',
+              uf: veiculo.uf || '',
+              fonte: 'api_n8n'
+            };
 
-          onRequestClientData(vehicleData);
-        } else {
-          // Não encontrou em lugar nenhum
+            onRequestClientData(vehicleData);
+          } else {
+            throw new Error('Dados inválidos retornados da API');
+          }
+        } catch (error) {
+          console.error('Erro ao consultar API n8n:', error);
+          
+          // Não encontrou ou erro na API
           setSteps(prev => prev.map((step, index) => 
             index === 2 ? { ...step, status: 'error' } : step
           ));
