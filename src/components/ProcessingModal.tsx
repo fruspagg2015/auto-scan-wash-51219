@@ -55,14 +55,23 @@ export const ProcessingModal: React.FC<ProcessingModalProps> = ({
           index === 0 ? { ...step, status: 'processing' } : step
         ));
         
+        // Converter base64 para Blob
+        const base64Data = capturedImage.split(',')[1];
+        const byteCharacters = atob(base64Data);
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+          byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        const imageBlob = new Blob([byteArray], { type: 'image/jpeg' });
+        
+        // Criar FormData e anexar o arquivo
+        const formData = new FormData();
+        formData.append('image', imageBlob, 'placa.jpg');
+        
         const response = await fetch('https://n8n04.frconnect.com.br/webhook-test/frsend.consultar.placa', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ 
-            image: capturedImage
-          })
+          body: formData
         });
         
         if (!response.ok) {
