@@ -69,7 +69,7 @@ export const ProcessingModal: React.FC<ProcessingModalProps> = ({
         const formData = new FormData();
         formData.append('image', imageBlob, 'placa.jpg');
         
-        const response = await fetch('https://n8n04.frconnect.com.br/webhook-test/frsend.consultar.placa', {
+        const response = await fetch('https://api04.frconnect.com.br/webhook/frsend.consultar.placa', {
           method: 'POST',
           body: formData
         });
