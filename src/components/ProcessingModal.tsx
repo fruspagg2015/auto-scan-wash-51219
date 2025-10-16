@@ -101,7 +101,7 @@ export const ProcessingModal: React.FC<ProcessingModalProps> = ({
           ));
 
           const vehicleData = {
-            placa: 'DETECTADA',
+            placa: veiculo.placa || 'NÃO IDENTIFICADA',
             modelo: veiculo.modelo || veiculo.submodelo || '',
             marca: veiculo.marca || '',
             ano: veiculo.ano || veiculo.anoModelo || '',
