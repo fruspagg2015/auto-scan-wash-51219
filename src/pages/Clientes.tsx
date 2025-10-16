@@ -65,14 +65,14 @@ export default function Clientes() {
     }
 
     try {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from('clients')
         .select('*')
         .eq('company_id', currentCompanyId)
         .order('created_at', { ascending: false })
 
       if (error) throw error
-      setClients(data || [])
+      setClients((data as Client[]) || [])
     } catch (error: any) {
       console.error('Error loading clients:', error)
       toast({
@@ -115,7 +115,7 @@ export default function Clientes() {
 
       if (editingClient) {
         // Update existing client
-        const { error } = await supabase
+        const { error } = await (supabase as any)
           .from('clients')
           .update({
             ...validatedData,
@@ -135,7 +135,7 @@ export default function Clientes() {
         })
       } else {
         // Insert new client
-        const { error } = await supabase
+        const { error } = await (supabase as any)
           .from('clients')
           .insert({
             company_id: currentCompanyId,
@@ -208,7 +208,7 @@ export default function Clientes() {
     }
 
     try {
-      const { error } = await supabase
+      const { error } = await (supabase as any)
         .from('clients')
         .delete()
         .eq('id', clientId)

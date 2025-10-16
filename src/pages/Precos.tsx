@@ -85,14 +85,14 @@ export default function Precos() {
     
     setLoading(true)
     try {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from('service_prices')
         .select('*')
         .eq('company_id', currentCompany.id)
         .order('created_at', { ascending: false })
 
       if (error) throw error
-      setServices(data || [])
+      setServices((data as ServicePrice[]) || [])
     } catch (error) {
       console.error('Error loading services:', error)
       toast({
@@ -186,7 +186,7 @@ export default function Precos() {
 
     setLoading(true)
     try {
-      const { error } = await supabase
+      const { error } = await (supabase as any)
         .from('service_prices')
         .insert({
           company_id: currentCompany.id,
@@ -228,7 +228,7 @@ export default function Precos() {
     if (!confirm('Deseja realmente excluir este serviço?')) return
 
     try {
-      const { error } = await supabase
+      const { error } = await (supabase as any)
         .from('service_prices')
         .delete()
         .eq('id', id)
