@@ -81,9 +81,8 @@ export const ProcessingModal: React.FC<ProcessingModalProps> = ({
         const apiData = await response.json();
         console.log("Resposta do n8n:", apiData);
         
-        if (apiData && apiData.length > 0) {
-          const resultado = apiData[0];
-          const veiculo = resultado.veiculo;
+        if (apiData && apiData.veiculo) {
+          const veiculo = apiData.veiculo;
           
           if (!veiculo) {
             throw new Error('Dados do veículo não encontrados');
