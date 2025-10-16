@@ -4,8 +4,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
-import { User, Phone, Car, Hash, Palette, Calendar } from "lucide-react";
+import { User, Phone, Car, Hash, Palette, Calendar, Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
+import { toast } from "@/hooks/use-toast";
 
 interface ClientDataModalProps {
   isOpen: boolean;
@@ -20,6 +23,7 @@ export const ClientDataModal: React.FC<ClientDataModalProps> = ({
   onCancel,
   vehicleData
 }) => {
+  const { currentCompanyId } = useAuth();
   const [formData, setFormData] = useState({
     nome: "",
     telefone: "",
@@ -31,6 +35,7 @@ export const ClientDataModal: React.FC<ClientDataModalProps> = ({
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -65,25 +70,112 @@ export const ClientDataModal: React.FC<ClientDataModalProps> = ({
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!validateForm()) return;
+    if (isSubmitting) return;
 
-    const completeData = {
-      ...vehicleData,
-      modelo: vehicleData?.modelo || formData.modelo,
-      marca: vehicleData?.marca || formData.marca,
-      ano: vehicleData?.ano || formData.ano,
-      cor: vehicleData?.cor || formData.cor,
-      cliente: {
-        nome: formData.nome,
-        telefone: formData.telefone,
-        email: formData.email,
-        cadastrado: false
-      },
-      fonte: vehicleData?.fonte || 'manual'
-    };
+    setIsSubmitting(true);
 
-    onComplete(completeData);
+    try {
+      // 1. Verificar se o cliente já existe pelo telefone
+      const { data: existingClient } = await supabase
+        .from('clients')
+        .select('id')
+        .eq('company_id', currentCompanyId)
+        .eq('telefone', formData.telefone)
+        .maybeSingle();
+
+      let clienteId: string;
+
+      if (existingClient) {
+        // Cliente já existe
+        clienteId = existingClient.id;
+        console.log('Cliente existente encontrado:', clienteId);
+      } else {
+        // Criar novo cliente
+        const { data: novoCliente, error: clienteError } = await supabase
+          .from('clients')
+          .insert({
+            company_id: currentCompanyId,
+            nome: formData.nome,
+            telefone: formData.telefone,
+            email: formData.email || null,
+            tipo: 'Pessoa Física',
+            status: 'Ativo'
+          })
+          .select()
+          .single();
+
+        if (clienteError) {
+          console.error('Erro ao criar cliente:', clienteError);
+          toast({
+            title: "Erro ao salvar cliente",
+            description: clienteError.message,
+            variant: "destructive"
+          });
+          setIsSubmitting(false);
+          return;
+        }
+
+        clienteId = novoCliente.id;
+        console.log('Novo cliente criado:', clienteId);
+      }
+
+      // 2. Vincular cliente ao veículo se temos idplaca
+      if (vehicleData?.idplaca) {
+        const { error: vinculoError } = await supabase
+          .from('clientes_veiculos')
+          .insert({
+            cliente_id: clienteId,
+            veiculo_idplaca: vehicleData.idplaca
+          });
+
+        // Ignorar erro de duplicate key (cliente já vinculado ao veículo)
+        if (vinculoError && vinculoError.code !== '23505') {
+          console.error('Erro ao vincular cliente-veículo:', vinculoError);
+          toast({
+            title: "Erro ao vincular veículo",
+            description: vinculoError.message,
+            variant: "destructive"
+          });
+        } else {
+          console.log('Cliente vinculado ao veículo:', vehicleData.idplaca);
+        }
+      }
+
+      // 3. Retornar dados completos
+      const completeData = {
+        ...vehicleData,
+        modelo: vehicleData?.modelo || formData.modelo,
+        marca: vehicleData?.marca || formData.marca,
+        ano: vehicleData?.ano || formData.ano,
+        cor: vehicleData?.cor || formData.cor,
+        cliente: {
+          id: clienteId,
+          nome: formData.nome,
+          telefone: formData.telefone,
+          email: formData.email,
+          cadastrado: true
+        },
+        fonte: vehicleData?.fonte || 'manual'
+      };
+
+      toast({
+        title: "✓ Dados salvos com sucesso!",
+        description: "Cliente e veículo foram registrados.",
+      });
+
+      onComplete(completeData);
+    } catch (error) {
+      console.error('Erro ao processar dados:', error);
+      toast({
+        title: "Erro ao processar dados",
+        description: "Ocorreu um erro inesperado. Tente novamente.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const formatPhone = (value: string) => {
@@ -121,14 +213,28 @@ export const ClientDataModal: React.FC<ClientDataModalProps> = ({
           {/* Informações da Placa */}
           <Card className="bg-wash-blue-light/20 border-wash-blue/30">
             <CardContent className="p-4">
-              <div className="flex items-center gap-3">
-                <Hash className="h-5 w-5 text-wash-blue" />
-                <div>
-                  <p className="text-sm text-muted-foreground">Placa detectada</p>
-                  <Badge variant="default" className="bg-wash-blue text-white font-mono">
-                    {vehicleData?.placa}
-                  </Badge>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Hash className="h-5 w-5 text-wash-blue" />
+                  <div>
+                    <p className="text-sm text-muted-foreground">Placa detectada</p>
+                    <Badge variant="default" className="bg-wash-blue text-white font-mono">
+                      {vehicleData?.placa}
+                    </Badge>
+                  </div>
                 </div>
+                {vehicleData?.fonte && (
+                  <Badge 
+                    variant={vehicleData.fonte === 'cache' ? 'default' : 'secondary'}
+                    className={
+                      vehicleData.fonte === 'cache' 
+                        ? 'bg-green-600 text-white hover:bg-green-700' 
+                        : 'bg-blue-600 text-white hover:bg-blue-700'
+                    }
+                  >
+                    {vehicleData.fonte === 'cache' ? '💾 CACHE' : '🌐 API'}
+                  </Badge>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -266,11 +372,27 @@ export const ClientDataModal: React.FC<ClientDataModalProps> = ({
 
           {/* Botões */}
           <div className="flex gap-3 pt-4">
-            <Button variant="outline" onClick={onCancel} className="flex-1">
+            <Button 
+              variant="outline" 
+              onClick={onCancel} 
+              className="flex-1"
+              disabled={isSubmitting}
+            >
               Cancelar
             </Button>
-            <Button onClick={handleSubmit} className="flex-1 bg-wash-blue hover:bg-wash-blue/90">
-              Confirmar
+            <Button 
+              onClick={handleSubmit} 
+              className="flex-1 bg-wash-blue hover:bg-wash-blue/90"
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Salvando...
+                </>
+              ) : (
+                'Confirmar'
+              )}
             </Button>
           </div>
         </div>
