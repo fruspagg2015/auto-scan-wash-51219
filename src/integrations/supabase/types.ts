@@ -14,16 +14,287 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      clientes_veiculos: {
+        Row: {
+          cliente_id: string
+          data_vinculo: string | null
+          id: string
+          observacoes: string | null
+          veiculo_idplaca: number
+        }
+        Insert: {
+          cliente_id: string
+          data_vinculo?: string | null
+          id?: string
+          observacoes?: string | null
+          veiculo_idplaca: number
+        }
+        Update: {
+          cliente_id?: string
+          data_vinculo?: string | null
+          id?: string
+          observacoes?: string | null
+          veiculo_idplaca?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "clientes_veiculos_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "clientes_veiculos_veiculo_idplaca_fkey"
+            columns: ["veiculo_idplaca"]
+            isOneToOne: false
+            referencedRelation: "veiculos"
+            referencedColumns: ["idplaca"]
+          },
+        ]
+      }
+      clients: {
+        Row: {
+          company_id: string
+          cpf: string | null
+          created_at: string | null
+          email: string | null
+          id: string
+          nome: string
+          status: string | null
+          telefone: string | null
+          tipo: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          company_id: string
+          cpf?: string | null
+          created_at?: string | null
+          email?: string | null
+          id?: string
+          nome: string
+          status?: string | null
+          telefone?: string | null
+          tipo?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          company_id?: string
+          cpf?: string | null
+          created_at?: string | null
+          email?: string | null
+          id?: string
+          nome?: string
+          status?: string | null
+          telefone?: string | null
+          tipo?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "clients_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      companies: {
+        Row: {
+          address: string | null
+          cnpj: string | null
+          created_at: string | null
+          email: string | null
+          id: string
+          logo_url: string | null
+          name: string
+          phone: string | null
+          subscription_plan:
+            | Database["public"]["Enums"]["subscription_plan"]
+            | null
+          subscription_status:
+            | Database["public"]["Enums"]["subscription_status"]
+            | null
+          updated_at: string | null
+        }
+        Insert: {
+          address?: string | null
+          cnpj?: string | null
+          created_at?: string | null
+          email?: string | null
+          id?: string
+          logo_url?: string | null
+          name: string
+          phone?: string | null
+          subscription_plan?:
+            | Database["public"]["Enums"]["subscription_plan"]
+            | null
+          subscription_status?:
+            | Database["public"]["Enums"]["subscription_status"]
+            | null
+          updated_at?: string | null
+        }
+        Update: {
+          address?: string | null
+          cnpj?: string | null
+          created_at?: string | null
+          email?: string | null
+          id?: string
+          logo_url?: string | null
+          name?: string
+          phone?: string | null
+          subscription_plan?:
+            | Database["public"]["Enums"]["subscription_plan"]
+            | null
+          subscription_status?:
+            | Database["public"]["Enums"]["subscription_status"]
+            | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      company_members: {
+        Row: {
+          company_id: string
+          created_at: string | null
+          id: string
+          status: Database["public"]["Enums"]["member_status"] | null
+          user_id: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string | null
+          id?: string
+          status?: Database["public"]["Enums"]["member_status"] | null
+          user_id: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string | null
+          id?: string
+          status?: Database["public"]["Enums"]["member_status"] | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "company_members_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string | null
+          full_name: string | null
+          id: string
+          updated_at: string | null
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string | null
+          full_name?: string | null
+          id: string
+          updated_at?: string | null
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string | null
+          full_name?: string | null
+          id?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
+      veiculos: {
+        Row: {
+          ano: string | null
+          anomodelo: string | null
+          cor: string | null
+          datainclusao: string | null
+          idplaca: number
+          marca: string | null
+          modelo: string | null
+          municipio: string | null
+          placa: string
+          submodelo: string | null
+          uf: string | null
+          versao: string | null
+        }
+        Insert: {
+          ano?: string | null
+          anomodelo?: string | null
+          cor?: string | null
+          datainclusao?: string | null
+          idplaca?: number
+          marca?: string | null
+          modelo?: string | null
+          municipio?: string | null
+          placa: string
+          submodelo?: string | null
+          uf?: string | null
+          versao?: string | null
+        }
+        Update: {
+          ano?: string | null
+          anomodelo?: string | null
+          cor?: string | null
+          datainclusao?: string | null
+          idplaca?: number
+          marca?: string | null
+          modelo?: string | null
+          municipio?: string | null
+          placa?: string
+          submodelo?: string | null
+          uf?: string | null
+          versao?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
+      is_company_member: {
+        Args: { _company_id: string; _user_id: string }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "admin" | "moderator" | "user"
+      member_status: "active" | "inactive" | "pending"
+      subscription_plan: "basic" | "professional" | "enterprise"
+      subscription_status: "active" | "cancelled" | "past_due" | "trial"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +421,11 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["admin", "moderator", "user"],
+      member_status: ["active", "inactive", "pending"],
+      subscription_plan: ["basic", "professional", "enterprise"],
+      subscription_status: ["active", "cancelled", "past_due", "trial"],
+    },
   },
 } as const
