@@ -161,6 +161,7 @@ export type Database = {
           id: string
           status: Database["public"]["Enums"]["member_status"] | null
           user_id: string
+          user_role: Database["public"]["Enums"]["app_role"]
         }
         Insert: {
           company_id: string
@@ -168,6 +169,7 @@ export type Database = {
           id?: string
           status?: Database["public"]["Enums"]["member_status"] | null
           user_id: string
+          user_role?: Database["public"]["Enums"]["app_role"]
         }
         Update: {
           company_id?: string
@@ -175,6 +177,7 @@ export type Database = {
           id?: string
           status?: Database["public"]["Enums"]["member_status"] | null
           user_id?: string
+          user_role?: Database["public"]["Enums"]["app_role"]
         }
         Relationships: [
           {
@@ -278,6 +281,15 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_user_companies: {
+        Args: { _user_id: string }
+        Returns: {
+          company_id: string
+          company_name: string
+          member_status: Database["public"]["Enums"]["member_status"]
+          user_role: Database["public"]["Enums"]["app_role"]
+        }[]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
