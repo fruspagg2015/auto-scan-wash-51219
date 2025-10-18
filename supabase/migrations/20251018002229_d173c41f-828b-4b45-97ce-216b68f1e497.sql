@@ -1,0 +1,4 @@
+
+-- Add new values to app_role enum (must be done separately)
+ALTER TYPE app_role ADD VALUE IF NOT EXISTS 'atendente';
+ALTER TYPE app_role ADD VALUE IF NOT EXISTS 'administrador';
