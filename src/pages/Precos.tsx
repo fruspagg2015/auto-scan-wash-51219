@@ -110,14 +110,9 @@ export default function Precos() {
     
     setLoading(true)
     try {
-      const { data, error } = await supabase
-        .from('promotions')
-        .select('*')
-        .eq('company_id', currentCompany.id)
-        .order('created_at', { ascending: false })
-
-      if (error) throw error
-      setPromotions(data || [])
+      // TODO: Create promotions table when needed
+      // For now, just set empty array
+      setPromotions([])
     } catch (error) {
       console.error('Error loading promotions:', error)
       toast({
@@ -136,21 +131,14 @@ export default function Precos() {
 
     setLoading(true)
     try {
-      const { error } = await supabase
-        .from('promotions')
-        .insert({
-          company_id: currentCompany.id,
-          name: formData.nome,
-          description: formData.descricao || null,
-          price: parseFloat(formData.preco),
-          original_price: parseFloat(formData.precoOriginal),
-          valid_from: formData.validadeInicio,
-          valid_until: formData.validadeFim,
-          days_of_week: formData.diasSemana.length > 0 ? formData.diasSemana : null,
-          status: 'active'
-        })
-
-      if (error) throw error
+      // TODO: Create promotions table when needed
+      toast({
+        title: "Funcionalidade em desenvolvimento",
+        description: "A tabela de promoções será criada em breve",
+        variant: "destructive"
+      })
+      setLoading(false)
+      return
 
       toast({
         title: "Promoção criada",
@@ -254,28 +242,12 @@ export default function Precos() {
   const handleDelete = async (id: string) => {
     if (!confirm('Deseja realmente excluir esta promoção?')) return
 
-    try {
-      const { error } = await supabase
-        .from('promotions')
-        .delete()
-        .eq('id', id)
-
-      if (error) throw error
-
-      toast({
-        title: "Promoção excluída",
-        description: "A promoção foi excluída com sucesso"
-      })
-
-      loadPromotions()
-    } catch (error) {
-      console.error('Error deleting promotion:', error)
-      toast({
-        title: "Erro ao excluir promoção",
-        description: "Não foi possível excluir a promoção",
-        variant: "destructive"
-      })
-    }
+    // TODO: Implement when promotions table is created
+    toast({
+      title: "Funcionalidade em desenvolvimento",
+      description: "A exclusão de promoções será implementada em breve",
+      variant: "destructive"
+    })
   }
 
   const toggleDayOfWeek = (day: DayOfWeek) => {

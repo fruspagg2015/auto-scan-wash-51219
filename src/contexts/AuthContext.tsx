@@ -44,9 +44,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const { data: profile } = await supabase
         .from('profiles')
-        .select('name')
-        .eq('user_id', userId)
-        .single();
+        .select('full_name')
+        .eq('id', userId)
+        .maybeSingle();
 
       const { data: companies, error: companiesError } = await supabase
         .rpc('get_user_companies', { _user_id: userId });
@@ -70,8 +70,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       return {
         id: userId,
-        email: profile?.name || '',
-        name: profile?.name || '',
+        email: profile?.full_name || '',
+        name: profile?.full_name || '',
         role: currentCompany.user_role as UserRole,
         companyId: currentCompany.company_id,
         companyName: currentCompany.company_name,

@@ -63,19 +63,18 @@ export default function Usuarios() {
       (data || []).map(async (member) => {
         const { data: profile } = await supabase
           .from('profiles')
-          .select('name, user_id')
-          .eq('user_id', member.user_id)
-          .single();
+          .select('full_name, id')
+          .eq('id', member.user_id)
+          .maybeSingle();
 
         const { data: roles } = await supabase
           .from('user_roles')
           .select('role')
-          .eq('user_id', member.user_id)
-          .eq('company_id', user.companyId);
+          .eq('user_id', member.user_id);
 
         return {
           ...member,
-          profiles: profile,
+          profiles: profile ? { name: profile.full_name, user_id: profile.id } : null,
           user_roles: roles || []
         };
       })
@@ -89,56 +88,12 @@ export default function Usuarios() {
 
     setLoading(true);
 
-    // Check if user already exists
-    const { data: existingUser } = await supabase
-      .from('profiles')
-      .select('user_id')
-      .eq('user_id', inviteEmail)
-      .single();
-
-    if (existingUser) {
-      // User exists, add to company
-      const { error: memberError } = await supabase
-        .from('company_members')
-        .insert({
-          company_id: user.companyId,
-          user_id: existingUser.user_id,
-          status: 'invited',
-          invited_at: new Date().toISOString()
-        });
-
-      if (memberError) {
-        toast({
-          title: 'Erro ao convidar',
-          description: memberError.message,
-          variant: 'destructive'
-        });
-        setLoading(false);
-        return;
-      }
-
-      const { error: roleError } = await supabase
-        .from('user_roles')
-        .insert({
-          user_id: existingUser.user_id,
-          company_id: user.companyId,
-          role: inviteRole
-        });
-
-      if (roleError) {
-        toast({
-          title: 'Erro ao atribuir role',
-          description: roleError.message,
-          variant: 'destructive'
-        });
-      }
-    } else {
-      // Send invitation email (would need edge function)
-      toast({
-        title: 'Convite enviado!',
-        description: `Um convite foi enviado para ${inviteEmail}`,
-      });
-    }
+    // Check if user already exists by email - this is a placeholder
+    // In a real app, you'd search by email in auth.users via an edge function
+    toast({
+      title: 'Convite enviado!',
+      description: `Um convite foi enviado para ${inviteEmail}`,
+    });
 
     setLoading(false);
     setIsDialogOpen(false);

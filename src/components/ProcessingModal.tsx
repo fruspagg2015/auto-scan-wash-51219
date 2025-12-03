@@ -124,7 +124,7 @@ export const ProcessingModal: React.FC<ProcessingModalProps> = ({
               submodelo: veiculoCache.submodelo,
               versao: veiculoCache.versao,
               ano: veiculoCache.ano,
-              anoModelo: veiculoCache.anoModelo,
+              anoModelo: veiculoCache.anomodelo,
               cor: veiculoCache.cor,
               municipio: veiculoCache.municipio,
               uf: veiculoCache.uf,

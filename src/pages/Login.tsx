@@ -88,13 +88,13 @@ export default function Login() {
 
         const { data: profile } = await supabase
           .from('profiles')
-          .select('name')
-          .eq('user_id', data.user.id)
-          .single();
+          .select('full_name')
+          .eq('id', data.user.id)
+          .maybeSingle();
 
         toast({
           title: "Login realizado com sucesso",
-          description: `Bem-vindo, ${profile?.name || data.user.email}!`,
+          description: `Bem-vindo, ${profile?.full_name || data.user.email}!`,
         });
 
         // Redirect based on user role
