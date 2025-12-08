@@ -66,22 +66,18 @@ export const ProcessingModal: React.FC<ProcessingModalProps> = ({
         const byteArray = new Uint8Array(byteNumbers);
         const imageBlob = new Blob([byteArray], { type: 'image/jpeg' });
         
-        // Criar FormData e anexar o arquivo
-        const formData = new FormData();
-        formData.append('image', imageBlob, 'placa.jpg');
-        
         // Primeiro, tentar obter a placa da API para ter o texto da placa
         setSteps(prev => prev.map((step, index) => 
           index === 0 ? { ...step, description: 'Consultando API externa...' } : step
         ));
         
-        // Enviar imagem como arquivo
-        const imageFormData = new FormData();
-        imageFormData.append('image', imageBlob, 'placa.jpg');
+        // Enviar imagem como arquivo binário via FormData
+        const formData = new FormData();
+        formData.append('image', imageBlob, 'placa.jpg');
         
         const response = await fetch('https://engine03.frconnect.com.br/webhook/frsend.consultar.placa', {
           method: 'POST',
-          body: imageFormData
+          body: formData
         });
         
         if (!response.ok) {
