@@ -52,10 +52,10 @@ export const ProcessingModal: React.FC<ProcessingModalProps> = ({
     const processSteps = async () => {
       try {
         // Etapa 1: Verificar cache no banco de dados primeiro
-        setSteps(prev => prev.map((step, index) => 
+        setSteps(prev => prev.map((step, index) =>
           index === 0 ? { ...step, status: 'processing', description: 'Verificando cache de placas...' } : step
         ));
-        
+
         // Converter base64 para Blob para enviar à API
         const base64Data = capturedImage.split(',')[1];
         const byteCharacters = atob(base64Data);
@@ -65,58 +65,58 @@ export const ProcessingModal: React.FC<ProcessingModalProps> = ({
         }
         const byteArray = new Uint8Array(byteNumbers);
         const imageBlob = new Blob([byteArray], { type: 'image/jpeg' });
-        
+
         // Primeiro, tentar obter a placa da API para ter o texto da placa
-        setSteps(prev => prev.map((step, index) => 
+        setSteps(prev => prev.map((step, index) =>
           index === 0 ? { ...step, description: 'Consultando API externa...' } : step
         ));
-        
-        // Enviar imagem como arquivo binário via FormData
-        const formData = new FormData();
-        formData.append('image', imageBlob, 'placa.jpg');
-        
-        const response = await fetch('https://engine03.frconnect.com.br/webhook/frsend.consultar.placa', {
+
+        // Enviar imagem como arquivo binário diretamente
+        const response = await fetch('https://n8n03.frconnect.com.br/webhook-test/frsend.consultar.placa', {
           method: 'POST',
-          body: formData
+          headers: {
+            'Content-Type': 'image/jpeg'
+          },
+          body: imageBlob
         });
-        
+
         if (!response.ok) {
           throw new Error('Erro na consulta da API');
         }
-        
+
         const apiData = await response.json();
         console.log("Resposta do n8n:", apiData);
-        
+
         if (apiData && apiData.veiculo) {
           const veiculo = apiData.veiculo;
           const placaDetectada = veiculo.placa;
-          
+
           if (!veiculo || !placaDetectada) {
             throw new Error('Dados do veículo não encontrados');
           }
-          
+
           // Verificar se a placa já existe no cache
-          setSteps(prev => prev.map((step, index) => 
+          setSteps(prev => prev.map((step, index) =>
             index === 0 ? { ...step, description: 'Verificando cache local...' } : step
           ));
-          
+
           const { data: veiculoCache, error: cacheError } = await supabase
             .from('veiculos')
             .select('*')
             .eq('placa', placaDetectada)
             .maybeSingle();
-          
+
           let vehicleData;
           let idplaca;
-          
+
           if (!cacheError && veiculoCache) {
             // ✅ ENCONTRADO NO CACHE
             console.log('Placa encontrada no cache:', veiculoCache);
-            
-            setSteps(prev => prev.map((step, index) => 
+
+            setSteps(prev => prev.map((step, index) =>
               index === 0 ? { ...step, status: 'completed', description: '✓ Dados encontrados no cache!' } : step
             ));
-            
+
             vehicleData = {
               placa: veiculoCache.placa,
               marca: veiculoCache.marca,
@@ -129,23 +129,23 @@ export const ProcessingModal: React.FC<ProcessingModalProps> = ({
               municipio: veiculoCache.municipio,
               uf: veiculoCache.uf,
               imagem: capturedImage,
-              hora_chegada: new Date().toLocaleTimeString('pt-BR', { 
-                hour: '2-digit', 
-                minute: '2-digit' 
+              hora_chegada: new Date().toLocaleTimeString('pt-BR', {
+                hour: '2-digit',
+                minute: '2-digit'
               }),
               fonte: 'cache',
               idplaca: veiculoCache.idplaca
             };
-            
+
             idplaca = veiculoCache.idplaca;
           } else {
             // ❌ NÃO ENCONTRADO - Salvar no cache
             console.log('Placa não encontrada no cache, salvando...');
-            
-            setSteps(prev => prev.map((step, index) => 
+
+            setSteps(prev => prev.map((step, index) =>
               index === 0 ? { ...step, description: 'Salvando no cache...' } : step
             ));
-            
+
             const { data: novoVeiculo, error: insertError } = await supabase
               .from('veiculos')
               .insert({
@@ -162,15 +162,15 @@ export const ProcessingModal: React.FC<ProcessingModalProps> = ({
               })
               .select()
               .single();
-            
+
             if (insertError) {
               console.error('Erro ao salvar veículo no cache:', insertError);
             }
-            
-            setSteps(prev => prev.map((step, index) => 
+
+            setSteps(prev => prev.map((step, index) =>
               index === 0 ? { ...step, status: 'completed', description: '✓ Dados obtidos da API!' } : step
             ));
-            
+
             vehicleData = {
               placa: veiculo.placa || 'NÃO IDENTIFICADA',
               marca: veiculo.marca || '',
@@ -183,21 +183,21 @@ export const ProcessingModal: React.FC<ProcessingModalProps> = ({
               municipio: veiculo.municipio || '',
               uf: veiculo.uf || '',
               imagem: capturedImage,
-              hora_chegada: new Date().toLocaleTimeString('pt-BR', { 
-                hour: '2-digit', 
-                minute: '2-digit' 
+              hora_chegada: new Date().toLocaleTimeString('pt-BR', {
+                hour: '2-digit',
+                minute: '2-digit'
               }),
               fonte: 'api_n8n',
               idplaca: novoVeiculo?.idplaca
             };
-            
+
             idplaca = novoVeiculo?.idplaca;
           }
-          
+
           setCurrentStep(1);
-          
+
           // Etapa 2: Solicitar dados do cliente
-          setSteps(prev => prev.map((step, index) => 
+          setSteps(prev => prev.map((step, index) =>
             index === 1 ? { ...step, status: 'processing' } : step
           ));
 
@@ -207,19 +207,19 @@ export const ProcessingModal: React.FC<ProcessingModalProps> = ({
         }
       } catch (error) {
         console.error('Erro ao processar imagem:', error);
-        
+
         // Marcar como erro
-        setSteps(prev => prev.map((step, index) => 
+        setSteps(prev => prev.map((step, index) =>
           index === 0 ? { ...step, status: 'error', description: 'Erro ao consultar placa' } : step
         ));
-        
+
         // Permitir entrada manual
         const vehicleData = {
           placa: "NÃO IDENTIFICADA",
           imagem: capturedImage,
-          hora_chegada: new Date().toLocaleTimeString('pt-BR', { 
-            hour: '2-digit', 
-            minute: '2-digit' 
+          hora_chegada: new Date().toLocaleTimeString('pt-BR', {
+            hour: '2-digit',
+            minute: '2-digit'
           }),
           fonte: 'manual'
         };
@@ -227,7 +227,7 @@ export const ProcessingModal: React.FC<ProcessingModalProps> = ({
         // Após 2 segundos, abrir modal de dados do cliente
         setTimeout(() => {
           setCurrentStep(1);
-          setSteps(prev => prev.map((step, index) => 
+          setSteps(prev => prev.map((step, index) =>
             index === 1 ? { ...step, status: 'processing' } : step
           ));
           onRequestClientData(vehicleData);
@@ -249,7 +249,7 @@ export const ProcessingModal: React.FC<ProcessingModalProps> = ({
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={() => {}}>
+    <Dialog open={isOpen} onOpenChange={() => { }}>
       <DialogContent className="max-w-md mx-auto [&>button]:hidden">
         <div className="p-6">
           <div className="text-center mb-6">
@@ -263,23 +263,21 @@ export const ProcessingModal: React.FC<ProcessingModalProps> = ({
 
           <div className="space-y-4">
             {steps.map((step, index) => (
-              <Card 
+              <Card
                 key={step.id}
-                className={`transition-all duration-300 ${
-                  step.status === 'processing' ? 'ring-2 ring-wash-blue/30 shadow-wash' :
-                  step.status === 'completed' ? 'bg-wash-green-light/20 border-wash-green/30' :
-                  step.status === 'error' ? 'bg-destructive/10 border-destructive/30' :
-                  'opacity-60'
-                }`}
+                className={`transition-all duration-300 ${step.status === 'processing' ? 'ring-2 ring-wash-blue/30 shadow-wash' :
+                    step.status === 'completed' ? 'bg-wash-green-light/20 border-wash-green/30' :
+                      step.status === 'error' ? 'bg-destructive/10 border-destructive/30' :
+                        'opacity-60'
+                  }`}
               >
                 <CardContent className="p-4">
                   <div className="flex items-center gap-3">
-                    <div className={`flex-shrink-0 ${
-                      step.status === 'processing' ? 'text-wash-blue' :
-                      step.status === 'completed' ? 'text-wash-green' :
-                      step.status === 'error' ? 'text-destructive' :
-                      'text-muted-foreground'
-                    }`}>
+                    <div className={`flex-shrink-0 ${step.status === 'processing' ? 'text-wash-blue' :
+                        step.status === 'completed' ? 'text-wash-green' :
+                          step.status === 'error' ? 'text-destructive' :
+                            'text-muted-foreground'
+                      }`}>
                       {getStepIcon(step)}
                     </div>
                     <div className="flex-1">
@@ -298,8 +296,8 @@ export const ProcessingModal: React.FC<ProcessingModalProps> = ({
           </div>
 
           <div className="mt-6 flex justify-center">
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               onClick={onCancel}
               disabled={steps.some(s => s.status === 'processing')}
             >
