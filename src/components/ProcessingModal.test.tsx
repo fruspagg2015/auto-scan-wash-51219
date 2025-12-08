@@ -72,7 +72,7 @@ describe('ProcessingModal', () => {
 
         await waitFor(() => {
             expect(global.fetch).toHaveBeenCalledWith(
-                'https://n8n03.frconnect.com.br/webhook-test/frsend.consultar.placa',
+                'https://engine03.frconnect.com.br/webhook/frsend.consultar.placa',
                 expect.objectContaining({
                     method: 'POST',
                     headers: expect.objectContaining({

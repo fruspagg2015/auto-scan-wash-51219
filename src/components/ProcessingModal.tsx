@@ -72,7 +72,7 @@ export const ProcessingModal: React.FC<ProcessingModalProps> = ({
         ));
 
         // Enviar imagem como arquivo binário diretamente
-        const response = await fetch('https://n8n03.frconnect.com.br/webhook-test/frsend.consultar.placa', {
+        const response = await fetch('https://engine03.frconnect.com.br/webhook/frsend.consultar.placa', {
           method: 'POST',
           headers: {
             'Content-Type': 'image/jpeg'
@@ -266,17 +266,17 @@ export const ProcessingModal: React.FC<ProcessingModalProps> = ({
               <Card
                 key={step.id}
                 className={`transition-all duration-300 ${step.status === 'processing' ? 'ring-2 ring-wash-blue/30 shadow-wash' :
-                    step.status === 'completed' ? 'bg-wash-green-light/20 border-wash-green/30' :
-                      step.status === 'error' ? 'bg-destructive/10 border-destructive/30' :
-                        'opacity-60'
+                  step.status === 'completed' ? 'bg-wash-green-light/20 border-wash-green/30' :
+                    step.status === 'error' ? 'bg-destructive/10 border-destructive/30' :
+                      'opacity-60'
                   }`}
               >
                 <CardContent className="p-4">
                   <div className="flex items-center gap-3">
                     <div className={`flex-shrink-0 ${step.status === 'processing' ? 'text-wash-blue' :
-                        step.status === 'completed' ? 'text-wash-green' :
-                          step.status === 'error' ? 'text-destructive' :
-                            'text-muted-foreground'
+                      step.status === 'completed' ? 'text-wash-green' :
+                        step.status === 'error' ? 'text-destructive' :
+                          'text-muted-foreground'
                       }`}>
                       {getStepIcon(step)}
                     </div>
