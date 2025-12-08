@@ -1,10 +1,10 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "react-router-dom";
-import { 
-  Car, 
-  Clock, 
-  TrendingUp, 
-  Users, 
+import {
+  Car,
+  Clock,
+  TrendingUp,
+  Users,
   DollarSign,
   Calendar,
   Camera,
@@ -15,13 +15,14 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { 
-  Table, 
-  TableBody, 
-  TableCell, 
-  TableHead, 
-  TableHeader, 
-  TableRow 
+import { supabase } from "@/integrations/supabase/client";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow
 } from "@/components/ui/table";
 import {
   DropdownMenu,
@@ -64,41 +65,8 @@ interface VehicleInService {
   dataAgendamento?: string;
 }
 
-const vehiclesInServiceInitial: VehicleInService[] = [
-  {
-    id: 1,
-    placa: "ABC-1234",
-    modelo: "Fiat Uno",
-    cor: "Prata",
-    servico: "Lavagem Completa",
-    status: "Em andamento",
-    horaChegada: "14:23",
-    tempoEstimado: "25 min",
-    tipoAtendimento: "fila"
-  },
-  {
-    id: 2,
-    placa: "XYZ-5678",
-    modelo: "Honda Civic",
-    cor: "Preto",
-    servico: "Lavagem + Cera",
-    status: "Aguardando",
-    horaChegada: "14:45",
-    tempoEstimado: "40 min",
-    tipoAtendimento: "fila"
-  },
-  {
-    id: 3,
-    placa: "DEF-9012",
-    modelo: "Toyota Corolla",
-    cor: "Branco",
-    servico: "Detalhamento",
-    status: "Finalizado",
-    horaChegada: "13:30",
-    tempoEstimado: "-",
-    tipoAtendimento: "agendado"
-  },
-];
+
+const vehiclesInServiceInitial: VehicleInService[] = [];
 
 const getStatusBadge = (status: string) => {
   switch (status) {
@@ -123,7 +91,7 @@ const Dashboard = () => {
     // Verificar se há novo agendamento vindo da tela de detalhes
     if (location.state?.novoAgendamento) {
       const novoAgendamento = location.state.novoAgendamento;
-      
+
       const novoVeiculo = {
         id: novoAgendamento.id,
         placa: novoAgendamento.placa,
@@ -131,7 +99,7 @@ const Dashboard = () => {
         cor: novoAgendamento.cor,
         servico: novoAgendamento.servicosNomes,
         status: novoAgendamento.status,
-        horaChegada: novoAgendamento.tipoAtendimento === 'agendado' 
+        horaChegada: novoAgendamento.tipoAtendimento === 'agendado'
           ? new Date(novoAgendamento.dataAgendamento).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
           : novoAgendamento.horaChegada,
         tempoEstimado: `${novoAgendamento.tempoEstimado} min`,
@@ -145,13 +113,13 @@ const Dashboard = () => {
         return novosVeiculos.sort((a, b) => {
           if (a.tipoAtendimento === 'agendado' && b.tipoAtendimento === 'fila') return -1;
           if (a.tipoAtendimento === 'fila' && b.tipoAtendimento === 'agendado') return 1;
-          
+
           if (a.tipoAtendimento === 'agendado' && b.tipoAtendimento === 'agendado') {
             const timeA = a.dataAgendamento ? new Date(a.dataAgendamento).getTime() : 0;
             const timeB = b.dataAgendamento ? new Date(b.dataAgendamento).getTime() : 0;
             return timeA - timeB;
           }
-          
+
           return a.id - b.id; // Ordem de chegada para fila
         });
       });
@@ -160,41 +128,97 @@ const Dashboard = () => {
       window.history.replaceState({}, document.title);
     }
 
-    // Carregar agendamentos do localStorage
-    const agendamentosSalvos = JSON.parse(localStorage.getItem('agendamentos') || '[]');
-    if (agendamentosSalvos.length > 0) {
-      const veiculosDoStorage = agendamentosSalvos.map((agendamento: any) => ({
-        id: agendamento.id,
-        placa: agendamento.placa,
-        modelo: `${agendamento.marca || ''} ${agendamento.modelo}`.trim(),
-        cor: agendamento.cor,
-        servico: agendamento.servicosNomes,
-        status: agendamento.status,
-        horaChegada: agendamento.tipoAtendimento === 'agendado' 
-          ? new Date(agendamento.dataAgendamento).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
-          : agendamento.horaChegada,
-        tempoEstimado: `${agendamento.tempoEstimado} min`,
-        tipoAtendimento: agendamento.tipoAtendimento,
-        dataAgendamento: agendamento.dataAgendamento
-      }));
+    const fetchServiceOrders = async () => {
+      try {
+        // @ts-ignore
+        const { data, error } = await supabase
+          .from('service_orders')
+          .select(`
+            id,
+            vehicle_id,
+            service_type,
+            status,
+            arrival_time,
+            estimated_time,
+            veiculos (
+              placa,
+              modelo,
+              cor
+            )
+          `);
 
-      setVehiclesInService(prev => {
-        const novosVeiculos = [...vehiclesInServiceInitial, ...veiculosDoStorage];
-        return novosVeiculos.sort((a, b) => {
-          if (a.tipoAtendimento === 'agendado' && b.tipoAtendimento === 'fila') return -1;
-          if (a.tipoAtendimento === 'fila' && b.tipoAtendimento === 'agendado') return 1;
-          
-          if (a.tipoAtendimento === 'agendado' && b.tipoAtendimento === 'agendado') {
-            const timeA = a.dataAgendamento ? new Date(a.dataAgendamento).getTime() : 0;
-            const timeB = b.dataAgendamento ? new Date(b.dataAgendamento).getTime() : 0;
-            return timeA - timeB;
-          }
-          
-          return a.id - b.id;
+        if (error) {
+          console.error('Error fetching service orders:', error);
+          // Fallback to local storage if DB fails (or just log it)
+          const agendamentosSalvos = JSON.parse(localStorage.getItem('agendamentos') || '[]');
+          loadFromLocalStorage(agendamentosSalvos);
+          return;
+        }
+
+        if (data) {
+          const formattedVehicles: VehicleInService[] = data.map((order: any) => ({
+            id: order.id,
+            placa: order.veiculos?.placa || 'N/A',
+            modelo: order.veiculos?.modelo || 'N/A',
+            cor: order.veiculos?.cor || 'N/A',
+            servico: order.service_type,
+            status: mapStatus(order.status),
+            horaChegada: new Date(order.arrival_time).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+            tempoEstimado: order.estimated_time || '-',
+            // Default to 'fila' as we don't have this in DB yet, or infer
+            tipoAtendimento: 'fila'
+          }));
+          setVehiclesInService(formattedVehicles);
+        }
+      } catch (err) {
+        console.error('Unexpected error:', err);
+      }
+    };
+
+    fetchServiceOrders();
+
+    // Carregar agendamentos do localStorage (Legacy support / Optimistic updates)
+    const loadFromLocalStorage = (agendamentosSalvos: any[]) => {
+      if (agendamentosSalvos.length > 0) {
+        const veiculosDoStorage = agendamentosSalvos.map((agendamento: any) => ({
+          id: agendamento.id,
+          placa: agendamento.placa,
+          modelo: `${agendamento.marca || ''} ${agendamento.modelo}`.trim(),
+          cor: agendamento.cor,
+          servico: agendamento.servicosNomes,
+          status: agendamento.status,
+          horaChegada: agendamento.tipoAtendimento === 'agendado'
+            ? new Date(agendamento.dataAgendamento).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+            : agendamento.horaChegada,
+          tempoEstimado: `${agendamento.tempoEstimado} min`,
+          tipoAtendimento: agendamento.tipoAtendimento,
+          dataAgendamento: agendamento.dataAgendamento
+        }));
+
+        setVehiclesInService(prev => {
+          // Merge strategy could be improved, for now just append if not exists? 
+          // Or just replace? The prompt asked for DB data.
+          // Let's prioritizing DB data but keeping this function for fallback.
+          // Actually, if we have DB data, we might duplicate. 
+          // But since I cleared initial state, let's strictly use DB if available.
+          // If DB is empty, maybe use local.
+          if (prev.length === 0) return veiculosDoStorage;
+          return prev;
         });
-      });
-    }
+      }
+    };
+
   }, [location.state]);
+
+  const mapStatus = (dbStatus: string) => {
+    const map: Record<string, string> = {
+      'pending': 'Aguardando',
+      'in_progress': 'Em andamento',
+      'completed': 'Finalizado',
+      'delivered': 'Entregue'
+    };
+    return map[dbStatus] || dbStatus;
+  };
 
   return (
     <div className="p-4 sm:p-6 space-y-4 sm:space-y-6 bg-gradient-to-br from-wash-blue-light/20 to-background min-h-full">
@@ -316,7 +340,7 @@ const Dashboard = () => {
               <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {serviceData.map((item, index) => (
                   <div key={index} className="flex items-center gap-2">
-                    <div 
+                    <div
                       className="w-2 h-2 sm:w-3 sm:h-3 rounded-full flex-shrink-0"
                       style={{ backgroundColor: item.color }}
                     />
@@ -354,28 +378,28 @@ const Dashboard = () => {
                 </TableHeader>
                 <TableBody>
                   {vehiclesInService.map((vehicle) => (
-                  <TableRow key={vehicle.id}>
-                    <TableCell className="font-medium">
-                      <div className="flex items-center gap-2">
-                        {vehicle.placa}
-                        {vehicle.tipoAtendimento === 'agendado' && (
-                          <Badge variant="outline" className="border-wash-blue text-wash-blue text-xs">
-                            <Calendar className="h-3 w-3 mr-1" />
-                            Agendado
-                          </Badge>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div>
-                        <div className="font-medium">{vehicle.modelo}</div>
-                        <div className="text-sm text-muted-foreground">{vehicle.cor}</div>
-                      </div>
-                    </TableCell>
-                    <TableCell>{vehicle.servico}</TableCell>
-                    <TableCell>{getStatusBadge(vehicle.status)}</TableCell>
-                    <TableCell>{vehicle.horaChegada}</TableCell>
-                    <TableCell>{vehicle.tempoEstimado}</TableCell>
+                    <TableRow key={vehicle.id}>
+                      <TableCell className="font-medium">
+                        <div className="flex items-center gap-2">
+                          {vehicle.placa}
+                          {vehicle.tipoAtendimento === 'agendado' && (
+                            <Badge variant="outline" className="border-wash-blue text-wash-blue text-xs">
+                              <Calendar className="h-3 w-3 mr-1" />
+                              Agendado
+                            </Badge>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div>
+                          <div className="font-medium">{vehicle.modelo}</div>
+                          <div className="text-sm text-muted-foreground">{vehicle.cor}</div>
+                        </div>
+                      </TableCell>
+                      <TableCell>{vehicle.servico}</TableCell>
+                      <TableCell>{getStatusBadge(vehicle.status)}</TableCell>
+                      <TableCell>{vehicle.horaChegada}</TableCell>
+                      <TableCell>{vehicle.tempoEstimado}</TableCell>
                       <TableCell>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
@@ -433,23 +457,23 @@ const Dashboard = () => {
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </div>
-                    
+
                     <div className="space-y-2">
                       <div className="flex items-center justify-between">
                         <span className="text-sm text-muted-foreground">Serviço:</span>
                         <span className="text-sm font-medium">{vehicle.servico}</span>
                       </div>
-                      
+
                       <div className="flex items-center justify-between">
                         <span className="text-sm text-muted-foreground">Status:</span>
                         {getStatusBadge(vehicle.status)}
                       </div>
-                      
+
                       <div className="flex items-center justify-between">
                         <span className="text-sm text-muted-foreground">Chegada:</span>
                         <span className="text-sm font-medium">{vehicle.horaChegada}</span>
                       </div>
-                      
+
                       {vehicle.tempoEstimado !== "-" && (
                         <div className="flex items-center justify-between">
                           <span className="text-sm text-muted-foreground">Tempo estimado:</span>

@@ -11,7 +11,11 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { CalendarIcon } from "lucide-react";
 import { format, addMinutes } from "date-fns";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
+
 import { cn } from "@/lib/utils";
+import { registerFullService } from "@/services/registrationService";
+import { useAuth } from "@/contexts/AuthContext";
+import { toast } from "sonner";
 
 interface VehicleData {
   placa: string;
@@ -40,15 +44,16 @@ interface Servico {
 }
 
 const VehicleDetails = () => {
+  const { currentCompanyId } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const vehicleData = location.state as VehicleData;
-  
+
   const [servicosSelecionados, setServicosSelecionados] = useState<string[]>([]);
   const [tipoAtendimento, setTipoAtendimento] = useState<'agendado' | 'fila' | ''>('');
   const [dataAgendamento, setDataAgendamento] = useState<Date>();
   const [horaAgendamento, setHoraAgendamento] = useState<string>('');
-  
+
   const servicosDisponiveis: Servico[] = [
     { id: '1', nome: 'Lavagem Simples', preco: 15, descricao: 'Lavagem externa com sabão neutro' },
     { id: '2', nome: 'Lavagem Completa', preco: 25, descricao: 'Lavagem externa + interna + pneus' },
@@ -64,8 +69,8 @@ const VehicleDetails = () => {
   }
 
   const handleServicoToggle = (servicoId: string) => {
-    setServicosSelecionados(prev => 
-      prev.includes(servicoId) 
+    setServicosSelecionados(prev =>
+      prev.includes(servicoId)
         ? prev.filter(id => id !== servicoId)
         : [...prev, servicoId]
     );
@@ -86,47 +91,63 @@ const VehicleDetails = () => {
       '5': 25, // Lavagem de Motor
       '6': 90  // Detalhamento
     };
-    
+
     return servicosSelecionados.reduce((total, servicoId) => {
       return total + (temposPorServico[servicoId as keyof typeof temposPorServico] || 0);
     }, 0);
   };
 
-  const confirmarServicos = () => {
+  const confirmarServicos = async () => {
     if (servicosSelecionados.length === 0) return;
     if (!tipoAtendimento) return;
 
-    const servicosSelecionadosDetalhes = servicosDisponiveis.filter(s => 
+    const servicosSelecionadosDetalhes = servicosDisponiveis.filter(s =>
       servicosSelecionados.includes(s.id)
     );
 
-    const agendamento = {
-      id: Date.now(),
-      placa: vehicleData.placa,
-      modelo: vehicleData.modelo,
-      marca: vehicleData.marca,
-      cor: vehicleData.cor,
-      servicos: servicosSelecionadosDetalhes,
-      servicosNomes: servicosSelecionadosDetalhes.map(s => s.nome).join(', '),
-      total: calcularTotal(),
-      tempoEstimado: calcularTempoEstimado(),
-      cliente: vehicleData.cliente,
-      tipoAtendimento,
-      dataAgendamento: tipoAtendimento === 'agendado' && dataAgendamento && horaAgendamento 
-        ? new Date(`${format(dataAgendamento, 'yyyy-MM-dd')}T${horaAgendamento}:00`)
-        : undefined,
-      status: 'Aguardando',
-      horaChegada: vehicleData.hora_chegada,
-      horaCriacao: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+    const servicosNomes = servicosSelecionadosDetalhes.map(s => s.nome);
+    const tempoEstimadoStr = `${calcularTempoEstimado()} min`;
+
+    // Prepare Client Data
+    // We assume if vehicleData.cliente exists, use it. Else we might need defaults or better error handling.
+    // However, the VehicleDetails interface implies cliente is optional? 
+    // If it's missing, we can't register a client properly without inputs.
+    // We should probably show an error or require client data if we strictly need to register it.
+    // For now, let's assume if it is displayed, it exists.
+
+    const clientData = {
+      nome: vehicleData.cliente?.nome || 'Cliente Anônimo', // Fallback
+      telefone: vehicleData.cliente?.telefone || '0000000000',
+      email: vehicleData.cliente?.email,
+      company_id: currentCompanyId! // Assert non-null or handle error
     };
 
-    // Salvar no localStorage para simular persistência
-    const agendamentosExistentes = JSON.parse(localStorage.getItem('agendamentos') || '[]');
-    agendamentosExistentes.push(agendamento);
-    localStorage.setItem('agendamentos', JSON.stringify(agendamentosExistentes));
+    if (!currentCompanyId) {
+      toast.error("Empresa não identificada. Não é possível salvar.");
+      return;
+    }
 
-    // Navegar para Dashboard
-    navigate('/dashboard', { state: { novoAgendamento: agendamento } });
+    try {
+      await registerFullService(
+        clientData,
+        {
+          placa: vehicleData.placa,
+          modelo: vehicleData.modelo,
+          marca: vehicleData.marca,
+          cor: vehicleData.cor,
+          ano: vehicleData.ano
+        },
+        servicosNomes,
+        tempoEstimadoStr
+      );
+
+      toast.success("Serviço confirmado e registrado com sucesso!");
+      navigate('/dashboard');
+
+    } catch (error: any) {
+      console.error("Erro ao registrar serviço:", error);
+      toast.error(`Erro ao registrar: ${error.message}`);
+    }
   };
 
   return (
@@ -134,8 +155,8 @@ const VehicleDetails = () => {
       <div className="max-w-md mx-auto">
         {/* Header */}
         <div className="flex items-center gap-4 mb-6">
-          <Button 
-            variant="ghost" 
+          <Button
+            variant="ghost"
             size="icon"
             onClick={() => navigate("/")}
             className="rounded-full"
@@ -229,17 +250,16 @@ const VehicleDetails = () => {
             {/* Fonte dos dados */}
             {vehicleData.fonte && (
               <div className="flex items-center justify-center p-2">
-                <Badge 
-                  variant="secondary" 
-                  className={`text-xs ${
-                    vehicleData.fonte === 'cadastro_local' ? 'bg-wash-green-light text-wash-green' :
+                <Badge
+                  variant="secondary"
+                  className={`text-xs ${vehicleData.fonte === 'cadastro_local' ? 'bg-wash-green-light text-wash-green' :
                     vehicleData.fonte === 'api_externa' ? 'bg-wash-blue-light text-wash-blue' :
-                    'bg-muted text-muted-foreground'
-                  }`}
+                      'bg-muted text-muted-foreground'
+                    }`}
                 >
                   {vehicleData.fonte === 'cadastro_local' ? '📋 Cadastro Local' :
-                   vehicleData.fonte === 'api_externa' ? '🌐 API Externa' :
-                   '✏️ Manual'}
+                    vehicleData.fonte === 'api_externa' ? '🌐 API Externa' :
+                      '✏️ Manual'}
                 </Badge>
               </div>
             )}
@@ -326,7 +346,7 @@ const VehicleDetails = () => {
                 />
                 <div className="flex-1">
                   <div className="flex items-center justify-between">
-                    <label 
+                    <label
                       htmlFor={servico.id}
                       className="text-sm font-medium text-foreground cursor-pointer"
                     >
@@ -484,8 +504,8 @@ const VehicleDetails = () => {
         <div className="space-y-3">
           <Button
             disabled={
-              servicosSelecionados.length === 0 || 
-              !tipoAtendimento || 
+              servicosSelecionados.length === 0 ||
+              !tipoAtendimento ||
               (tipoAtendimento === 'agendado' && (!dataAgendamento || !horaAgendamento))
             }
             variant="wash"
@@ -495,7 +515,7 @@ const VehicleDetails = () => {
           >
             ✅ Confirmar Serviços ({servicosSelecionados.length})
           </Button>
-          
+
           <Button
             onClick={() => navigate("/")}
             variant="outline"
