@@ -75,12 +75,13 @@ export const ProcessingModal: React.FC<ProcessingModalProps> = ({
           index === 0 ? { ...step, description: 'Consultando API externa...' } : step
         ));
         
+        // Enviar imagem como arquivo
+        const imageFormData = new FormData();
+        imageFormData.append('image', imageBlob, 'placa.jpg');
+        
         const response = await fetch('https://engine03.frconnect.com.br/webhook/frsend.consultar.placa', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ image: base64Data })
+          body: imageFormData
         });
         
         if (!response.ok) {
