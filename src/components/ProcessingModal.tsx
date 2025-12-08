@@ -80,7 +80,7 @@ export const ProcessingModal: React.FC<ProcessingModalProps> = ({
           headers: {
             'Content-Type': 'application/json'
           },
-          body: JSON.stringify({ placa: base64Data })
+          body: JSON.stringify({ image: base64Data })
         });
         
         if (!response.ok) {
