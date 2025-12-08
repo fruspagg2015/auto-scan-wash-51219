@@ -171,15 +171,6 @@ export default function Login() {
             </Button>
           </form>
 
-          <div className="mt-6 pt-4 border-t border-border">
-            <div className="text-sm text-muted-foreground space-y-2">
-              <p className="font-medium">Credenciais de teste:</p>
-              <div className="space-y-1 text-xs">
-                <p><strong>Atendente:</strong> atendente@carwash.com / senha123</p>
-                <p><strong>Admin:</strong> admin@carwash.com / admin123</p>
-              </div>
-            </div>
-          </div>
         </CardContent>
       </Card>
     </div>
