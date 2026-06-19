@@ -16,6 +16,9 @@ export default defineConfig(({ mode }) => ({
       }
     }
   },
+  preview: {
+    allowedHosts: ["carwash.frconnect.com.br"]
+  },
   plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),
   resolve: {
     alias: {
