@@ -7,8 +7,8 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
+import { signInApi } from '@/services/authApi';
 
 const loginSchema = z.object({
   email: z.string().email('Email inválido').trim(),
@@ -21,7 +21,7 @@ export default function Login() {
   const [isLoading, setIsLoading] = useState(false);
   const [authError, setAuthError] = useState('');
   
-  const { user } = useAuth();
+  const { user, loginWithApi } = useAuth();
   const navigate = useNavigate();
 
   // Redirect if already authenticated
@@ -61,51 +61,23 @@ export default function Login() {
     setIsLoading(true);
 
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: formData.email,
-        password: formData.password,
+      const payload = await signInApi(formData.email, formData.password);
+      
+      loginWithApi(payload);
+
+      toast({
+        title: "Login realizado com sucesso",
+        description: `Bem-vindo, ${payload.user.nome || payload.user.usuario}!`,
       });
 
-      if (error) {
-        // Map Supabase errors to Portuguese
-        if (error.message.includes('Invalid login credentials')) {
-          setAuthError('Email ou senha incorretos');
-        } else if (error.message.includes('Email not confirmed')) {
-          setAuthError('Email não confirmado. Verifique seu email.');
-        } else {
-          setAuthError(error.message);
-        }
-        return;
+      // Redirect based on user role
+      if (payload.user.perfil === 'admin') {
+        navigate('/dashboard');
+      } else {
+        navigate('/atendimento');
       }
-
-      if (data.user) {
-        // Fetch user role to determine redirect
-        const { data: roleData } = await supabase
-          .from('user_roles')
-          .select('role')
-          .eq('user_id', data.user.id)
-          .single();
-
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('full_name')
-          .eq('id', data.user.id)
-          .maybeSingle();
-
-        toast({
-          title: "Login realizado com sucesso",
-          description: `Bem-vindo, ${profile?.full_name || data.user.email}!`,
-        });
-
-        // Redirect based on user role
-        if (roleData?.role === 'administrador') {
-          navigate('/dashboard');
-        } else {
-          navigate('/atendimento');
-        }
-      }
-    } catch (error) {
-      setAuthError('Erro interno. Tente novamente.');
+    } catch (error: any) {
+      setAuthError(error.message || 'Erro interno. Tente novamente.');
     } finally {
       setIsLoading(false);
     }

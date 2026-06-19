@@ -9,10 +9,20 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { Plus, Search, Edit, Trash2, Phone, Mail, MapPin, Loader2 } from "lucide-react"
-import { supabase } from "@/integrations/supabase/client"
 import { useAuth } from "@/contexts/AuthContext"
 import { useToast } from "@/hooks/use-toast"
 import { z } from "zod"
+import { listClientsApi, saveClientApi, deleteClientApi, ClientSavePayload } from "@/services/clientApi"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
 interface Client {
   id: string
@@ -27,6 +37,10 @@ interface Client {
   status: string
   created_at: string
   updated_at: string
+  documento?: string
+  numero?: string
+  idcidade?: number
+  idbairro?: number
 }
 
 const clientSchema = z.object({
@@ -34,6 +48,8 @@ const clientSchema = z.object({
   telefone: z.string().trim().min(1, "Telefone é obrigatório").max(20, "Telefone deve ter no máximo 20 caracteres"),
   email: z.string().trim().email("Email inválido").max(255, "Email deve ter no máximo 255 caracteres").optional().or(z.literal("")),
   endereco: z.string().trim().max(255, "Endereço deve ter no máximo 255 caracteres").optional(),
+  numero: z.string().trim().max(50, "Número deve ter no máximo 50 caracteres").optional(),
+  documento: z.string().trim().max(50, "Documento deve ter no máximo 50 caracteres").optional(),
   cidade: z.string().trim().max(100, "Cidade deve ter no máximo 100 caracteres").optional(),
   tipo: z.enum(["Pessoa Física", "Pessoa Jurídica"]),
   observacoes: z.string().trim().max(500, "Observações devem ter no máximo 500 caracteres").optional(),
@@ -48,31 +64,44 @@ export default function Clientes() {
   const [searchTerm, setSearchTerm] = useState("")
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingClient, setEditingClient] = useState<Client | null>(null)
+  const [clientToDelete, setClientToDelete] = useState<Client | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
   const [formData, setFormData] = useState({
     nome: "",
     telefone: "",
     email: "",
     endereco: "",
+    numero: "",
+    documento: "",
     cidade: "",
     tipo: "Pessoa Física",
     observacoes: ""
   })
 
   const loadClients = async () => {
-    if (!currentCompanyId) {
-      setIsLoading(false)
-      return
-    }
-
     try {
-      const { data, error } = await (supabase as any)
-        .from('clients')
-        .select('*')
-        .eq('company_id', currentCompanyId)
-        .order('created_at', { ascending: false })
+      const data = await listClientsApi()
+      
+      const mappedClients: Client[] = data.map((c: any) => ({
+        id: String(c.idcliente || c.id || ''),
+        company_id: 'default-company',
+        nome: c.nome,
+        tipo: 'Pessoa Física', // Padrão
+        telefone: c.telefoneformatado || c.telefone,
+        email: c.email || '',
+        endereco: c.logradouro || c.endereco || '',
+        cidade: c.cidade || '',
+        observacoes: c.observacoes || '',
+        status: c.status === false ? 'Inativo' : 'Ativo',
+        created_at: c.datainclusaoformatada || '',
+        updated_at: c.datainclusaoformatada || '',
+        documento: c.documento || '',
+        numero: c.numero || '',
+        idcidade: c.idcidade || 1,
+        idbairro: c.idbairro || 1
+      }))
 
-      if (error) throw error
-      setClients((data as Client[]) || [])
+      setClients(mappedClients)
     } catch (error: any) {
       console.error('Error loading clients:', error)
       toast({
@@ -98,56 +127,39 @@ export default function Clientes() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    if (!currentCompanyId) {
-      toast({
-        title: "Erro",
-        description: "Empresa não identificada",
-        variant: "destructive"
-      })
-      return
-    }
-
     setIsSubmitting(true)
 
     try {
       // Validar dados do formulário
       const validatedData = clientSchema.parse(formData)
 
-      if (editingClient) {
-        // Update existing client
-        const { error } = await (supabase as any)
-          .from('clients')
-          .update({
-            ...validatedData,
-            email: validatedData.email || null,
-            endereco: validatedData.endereco || null,
-            cidade: validatedData.cidade || null,
-            observacoes: validatedData.observacoes || null,
-          })
-          .eq('id', editingClient.id)
-          .eq('company_id', currentCompanyId)
+      // Extrai apenas números do telefone
+      const rawPhone = formData.telefone.replace(/\D/g, '')
 
-        if (error) throw error
+      const clientPayload: ClientSavePayload = {
+        nome: validatedData.nome,
+        email: validatedData.email || '',
+        documento: validatedData.documento || '',
+        logradouro: validatedData.endereco || '',
+        numero: validatedData.numero || '',
+        idcidade: 1, // Padrão do curl
+        idbairro: 1, // Padrão do curl
+        telefone: rawPhone,
+        status: true
+      }
+
+      if (editingClient) {
+        // Atualização de cliente existente (precisa de idcliente)
+        clientPayload.idcliente = Number(editingClient.id)
+        await saveClientApi(clientPayload)
 
         toast({
           title: "Cliente atualizado",
           description: "Os dados do cliente foram atualizados com sucesso"
         })
       } else {
-        // Insert new client
-        const { error } = await (supabase as any)
-          .from('clients')
-          .insert({
-            company_id: currentCompanyId,
-            ...validatedData,
-            email: validatedData.email || null,
-            endereco: validatedData.endereco || null,
-            cidade: validatedData.cidade || null,
-            observacoes: validatedData.observacoes || null,
-            status: 'Ativo'
-          })
-
-        if (error) throw error
+        // Cadastro de novo cliente (NÃO pode ter idcliente)
+        await saveClientApi(clientPayload)
 
         toast({
           title: "Cliente cadastrado",
@@ -162,6 +174,8 @@ export default function Clientes() {
         telefone: "",
         email: "",
         endereco: "",
+        numero: "",
+        documento: "",
         cidade: "",
         tipo: "Pessoa Física",
         observacoes: ""
@@ -195,6 +209,8 @@ export default function Clientes() {
       telefone: cliente.telefone,
       email: cliente.email || "",
       endereco: cliente.endereco || "",
+      numero: cliente.numero || "",
+      documento: cliente.documento || "",
       cidade: cliente.cidade || "",
       tipo: cliente.tipo,
       observacoes: cliente.observacoes || ""
@@ -202,24 +218,22 @@ export default function Clientes() {
     setIsDialogOpen(true)
   }
 
-  const handleDelete = async (clientId: string) => {
-    if (!confirm("Tem certeza que deseja excluir este cliente?")) {
-      return
-    }
+  const handleDelete = (cliente: Client) => {
+    setClientToDelete(cliente)
+  }
 
+  const handleDeleteConfirm = async () => {
+    if (!clientToDelete) return
+
+    setIsDeleting(true)
     try {
-      const { error } = await (supabase as any)
-        .from('clients')
-        .delete()
-        .eq('id', clientId)
-        .eq('company_id', currentCompanyId)
-
-      if (error) throw error
+      await deleteClientApi(Number(clientToDelete.id))
 
       toast({
         title: "Cliente excluído",
         description: "Cliente removido com sucesso"
       })
+      setClientToDelete(null)
       loadClients()
     } catch (error: any) {
       console.error('Error deleting client:', error)
@@ -228,6 +242,8 @@ export default function Clientes() {
         description: error.message || "Não foi possível excluir o cliente",
         variant: "destructive"
       })
+    } finally {
+      setIsDeleting(false)
     }
   }
 
@@ -262,6 +278,8 @@ export default function Clientes() {
       telefone: "",
       email: "",
       endereco: "",
+      numero: "",
+      documento: "",
       cidade: "",
       tipo: "Pessoa Física",
       observacoes: ""
@@ -339,6 +357,16 @@ export default function Clientes() {
                 </div>
                 
                 <div className="space-y-2">
+                  <Label htmlFor="documento">CPF/CNPJ</Label>
+                  <Input
+                    id="documento"
+                    value={formData.documento}
+                    onChange={(e) => setFormData({...formData, documento: e.target.value})}
+                    placeholder="000.000.000-00"
+                  />
+                </div>
+
+                <div className="space-y-2">
                   <Label htmlFor="email">E-mail</Label>
                   <Input
                     id="email"
@@ -349,11 +377,22 @@ export default function Clientes() {
                 </div>
                 
                 <div className="space-y-2">
-                  <Label htmlFor="endereco">Endereço</Label>
+                  <Label htmlFor="endereco">Endereço (Logradouro)</Label>
                   <Input
                     id="endereco"
                     value={formData.endereco}
                     onChange={(e) => setFormData({...formData, endereco: e.target.value})}
+                    placeholder="Rua, Avenida, etc."
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="numero">Número</Label>
+                  <Input
+                    id="numero"
+                    value={formData.numero}
+                    onChange={(e) => setFormData({...formData, numero: e.target.value})}
+                    placeholder="123 ou S/N"
                   />
                 </div>
                 
@@ -525,7 +564,7 @@ export default function Clientes() {
                           <Button variant="ghost" size="sm" onClick={() => handleEdit(cliente)}>
                             <Edit className="h-4 w-4" />
                           </Button>
-                          <Button variant="ghost" size="sm" onClick={() => handleDelete(cliente.id)}>
+                          <Button variant="ghost" size="sm" onClick={() => handleDelete(cliente)}>
                             <Trash2 className="h-4 w-4" />
                           </Button>
                         </div>
@@ -538,6 +577,30 @@ export default function Clientes() {
           </div>
         </CardContent>
       </Card>
+      {/* Confirm Delete Dialog */}
+      <AlertDialog open={!!clientToDelete} onOpenChange={(open) => !open && setClientToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir Cliente</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir o cliente <strong>{clientToDelete?.nome}</strong>? Esta ação não poderá ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={(e) => {
+                e.preventDefault()
+                handleDeleteConfirm()
+              }}
+              disabled={isDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isDeleting ? "Excluindo..." : "Confirmar"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

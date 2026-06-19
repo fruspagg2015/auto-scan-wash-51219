@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { User as SupabaseUser, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
+import { ApiLoginPayload, ApiUser } from '@/services/authApi';
 
 export type UserRole = 'atendente' | 'administrador';
 
@@ -30,9 +31,33 @@ interface AuthContextType {
   switchCompany: (companyId: string) => Promise<void>;
   currentCompanyId: string | null;
   currentCompany: Company | null;
+  loginWithApi: (payload: ApiLoginPayload) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+const mapApiUserToUser = (apiUser: ApiUser): User => {
+  const role: UserRole = apiUser.perfil === 'admin' ? 'administrador' : 'atendente';
+  const companyId = 'default-company';
+  const companyName = 'Empresa Padrão';
+  
+  const company: Company = {
+    id: companyId,
+    name: companyName,
+    role: role,
+    status: 'active'
+  };
+
+  return {
+    id: String(apiUser.idusuario),
+    email: apiUser.email,
+    name: apiUser.nome,
+    role: role,
+    companyId: companyId,
+    companyName: companyName,
+    companies: [company]
+  };
+};
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -89,7 +114,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
-    // Set up auth state listener first
+    // 1. Verificar primeiro a nova API
+    const storedToken = localStorage.getItem('auth_token');
+    const storedUserJson = localStorage.getItem('auth_user');
+
+    if (storedToken && storedUserJson) {
+      try {
+        const apiUser: ApiUser = JSON.parse(storedUserJson);
+        const mappedUser = mapApiUserToUser(apiUser);
+        setUser(mappedUser);
+        setCurrentCompanyId(mappedUser.companyId);
+        setIsLoading(false);
+        return; // Pula a inicialização do Supabase se já estiver autenticado na nova API
+      } catch (e) {
+        console.error('Erro ao restaurar sessão da nova API:', e);
+        // Em caso de erro ao parsear, limpa e tenta o fallback
+        localStorage.removeItem('auth_token');
+        localStorage.removeItem('auth_idsessao');
+        localStorage.removeItem('auth_user');
+      }
+    }
+
+    // 2. Fallback para Supabase
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         setSession(session);
@@ -100,14 +146,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setUser(userData);
           }, 0);
         } else {
-          setUser(null);
-          setCurrentCompanyId(null);
-          localStorage.removeItem('currentCompanyId');
+          // Apenas limpa se não houver sessão ativa da nova API
+          if (!localStorage.getItem('auth_token')) {
+            setUser(null);
+            setCurrentCompanyId(null);
+            localStorage.removeItem('currentCompanyId');
+          }
         }
       }
     );
 
-    // Then check for existing session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       
@@ -125,8 +173,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => subscription.unsubscribe();
   }, []);
 
+  const loginWithApi = (payload: ApiLoginPayload) => {
+    localStorage.setItem('auth_token', payload.token);
+    localStorage.setItem('auth_idsessao', String(payload.idsessao));
+    localStorage.setItem('auth_user', JSON.stringify(payload.user));
+
+    const mappedUser = mapApiUserToUser(payload.user);
+    setUser(mappedUser);
+    setCurrentCompanyId(mappedUser.companyId);
+  };
+
   const logout = async () => {
+    // Limpa credenciais da nova API
+    localStorage.removeItem('auth_token');
+    localStorage.removeItem('auth_idsessao');
+    localStorage.removeItem('auth_user');
+    
+    // Limpa credenciais do Supabase
     await supabase.auth.signOut();
+    
     setUser(null);
     setSession(null);
     setCurrentCompanyId(null);
@@ -134,7 +199,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const switchCompany = async (companyId: string) => {
-    if (!user || !session) return;
+    if (!user) return;
     
     const company = user.companies.find(c => c.id === companyId);
     if (!company) return;
@@ -154,11 +219,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     user,
     session,
     logout,
-    isAuthenticated: !!session,
+    isAuthenticated: !!user,
     isLoading,
     switchCompany,
     currentCompanyId,
-    currentCompany: user?.companies.find(c => c.id === currentCompanyId) || null
+    currentCompany: user?.companies.find(c => c.id === currentCompanyId) || null,
+    loginWithApi
   };
 
   return (
