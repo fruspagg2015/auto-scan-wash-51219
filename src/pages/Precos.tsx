@@ -140,6 +140,7 @@ export default function Precos() {
       setLoading(false)
       return
 
+      /* 
       toast({
         title: "Promoção criada",
         description: "A promoção foi criada com sucesso"
@@ -156,6 +157,7 @@ export default function Precos() {
         diasSemana: []
       })
       loadPromotions()
+      */
     } catch (error) {
       console.error('Error creating promotion:', error)
       toast({
