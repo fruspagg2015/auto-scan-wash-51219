@@ -165,11 +165,21 @@ const CameraCapture = () => {
       const canvas = canvasRef.current;
       const context = canvas.getContext("2d");
 
-      // O overlay na tela é w-3/4 (75%) e h-1/3 (33%) centralizado.
-      // Vamos recortar exatamente essa área para focar apenas na placa.
       const videoWidth = video.videoWidth;
       const videoHeight = video.videoHeight;
 
+      // Garante que o vídeo já tem dimensões válidas antes de capturar
+      if (!videoWidth || !videoHeight) {
+        toast({
+          title: "Câmera ainda carregando",
+          description: "Aguarde a câmera inicializar completamente e tente novamente.",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      // O overlay na tela é w-3/4 (75%) e h-1/3 (33%) centralizado.
+      // Vamos recortar exatamente essa área para focar apenas na placa.
       const cropWidth = videoWidth * 0.75;
       const cropHeight = videoHeight * 0.35; // 35% de altura para margem
       const cropX = (videoWidth - cropWidth) / 2;
@@ -330,22 +340,8 @@ const CameraCapture = () => {
                     }`}
                   >
                     <Camera className="h-4 w-4 mr-2" />
-                    {isCameraActive ? "Capturar Foto" : "Iniciar Câmera"}
+                    {isCameraActive ? "📸 Capturar Foto" : "Iniciar Câmera"}
                   </Button>
-
-                  {/* Botão de captura fixo na parte inferior para celulares */}
-                  {isCameraActive && (
-                    <div className="fixed bottom-6 left-0 right-0 flex justify-center z-50 px-6">
-                      <Button
-                        onClick={capturePhoto}
-                        size="lg"
-                        className="w-full max-w-sm h-14 text-base font-bold bg-wash-blue text-white hover:bg-wash-blue/90 shadow-2xl rounded-2xl"
-                      >
-                        <Camera className="h-5 w-5 mr-2" />
-                        📸 Capturar Foto
-                      </Button>
-                    </div>
-                  )}
 
                   <input
                     type="file"
