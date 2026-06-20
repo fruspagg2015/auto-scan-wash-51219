@@ -22,6 +22,11 @@ const CameraCapture = () => {
   const [isSearchingPlate, setIsSearchingPlate] = useState(false);
   const navigate = useNavigate();
 
+  // Sincroniza isCameraActive com o stream de forma confiável
+  useEffect(() => {
+    setIsCameraActive(stream !== null);
+  }, [stream]);
+
   const handleManualSearch = useCallback(async () => {
     if (manualPlate.length < 7) return;
     setIsSearchingPlate(true);
@@ -120,17 +125,11 @@ const CameraCapture = () => {
       }
 
       setStream(mediaStream);
-      setIsCameraActive(true);
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream;
-        // Aguardar o video comecar a tocar para garantir o estado
-        videoRef.current.onloadedmetadata = () => {
-          setIsCameraActive(true);
-        };
       }
     } catch (error) {
       console.error("Erro ao acessar a câmera:", error);
-      setIsCameraActive(false);
       toast({
         title: "Erro ao acessar a câmera",
         description: "Não foi possível ativar a câmera. Verifique as permissões ou use 'Carregar Imagem'.",
@@ -324,15 +323,29 @@ const CameraCapture = () => {
                     onClick={isCameraActive ? capturePhoto : startCamera}
                     variant="camera"
                     size="lg"
-                    className={`w-full h-11 text-sm ${
+                    className={`w-full h-11 text-sm transition-all duration-200 ${
                       isCameraActive
-                        ? "bg-wash-blue text-white hover:bg-wash-blue/90"
+                        ? "bg-wash-blue text-white hover:bg-wash-blue/90 shadow-lg"
                         : ""
                     }`}
                   >
                     <Camera className="h-4 w-4 mr-2" />
                     {isCameraActive ? "Capturar Foto" : "Iniciar Câmera"}
                   </Button>
+
+                  {/* Botão de captura fixo na parte inferior para celulares */}
+                  {isCameraActive && (
+                    <div className="fixed bottom-6 left-0 right-0 flex justify-center z-50 px-6">
+                      <Button
+                        onClick={capturePhoto}
+                        size="lg"
+                        className="w-full max-w-sm h-14 text-base font-bold bg-wash-blue text-white hover:bg-wash-blue/90 shadow-2xl rounded-2xl"
+                      >
+                        <Camera className="h-5 w-5 mr-2" />
+                        📸 Capturar Foto
+                      </Button>
+                    </div>
+                  )}
 
                   <input
                     type="file"
