@@ -21,19 +21,6 @@ const CameraCapture = () => {
   const [isSearchingPlate, setIsSearchingPlate] = useState(false);
   const navigate = useNavigate();
 
-  const handleImageUpload = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const result = e.target?.result as string;
-        setCapturedImage(result);
-        stopCamera();
-      };
-      reader.readAsDataURL(file);
-    }
-  }, [stopCamera]);
-
   const handleManualSearch = useCallback(async () => {
     if (manualPlate.length < 7) return;
     setIsSearchingPlate(true);
@@ -131,6 +118,19 @@ const CameraCapture = () => {
       setIsStreamActive(false);
     }
   }, [stream]);
+
+  const handleImageUpload = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const result = e.target?.result as string;
+        setCapturedImage(result);
+        stopCamera();
+      };
+      reader.readAsDataURL(file);
+    }
+  }, [stopCamera]);
 
   const capturePhoto = useCallback(() => {
     if (videoRef.current && canvasRef.current) {
