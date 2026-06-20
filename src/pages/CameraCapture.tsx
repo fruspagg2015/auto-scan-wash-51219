@@ -98,6 +98,16 @@ const CameraCapture = () => {
   }, [manualPlate]);
 
   const startCamera = useCallback(async () => {
+    // Verificar se a API de mídia está disponível (bloqueada pelo navegador em conexões HTTP sem SSL/HTTPS)
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      toast({
+        title: "Câmera indisponível (Requer HTTPS)",
+        description: "O navegador bloqueia o acesso à câmera em conexões HTTP não seguras. Por favor, acesse o sistema usando HTTPS ou utilize a opção 'Carregar Imagem'.",
+        variant: "destructive"
+      });
+      return;
+    }
+
     try {
       let mediaStream;
       try {
