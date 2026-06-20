@@ -5,7 +5,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Loader2, Camera, Database, Globe, UserPlus, CheckCircle, Edit, Check } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
-import Tesseract from "tesseract.js";
 
 interface ProcessingStep {
   id: string;
@@ -104,12 +103,16 @@ export const ProcessingModal: React.FC<ProcessingModalProps> = ({
           step.id === 'ocr' ? { ...step, status: 'processing', description: 'Processando texto da imagem...' } : step
         ));
 
+        // Importar tesseract.js dinamicamente para evitar travamento na inicialização
+        const tesseractModule = await import("tesseract.js");
+        const tesseractInstance = tesseractModule.default || tesseractModule;
+
         // Executar OCR usando tesseract.js
-        const result = await Tesseract.recognize(
+        const result = await tesseractInstance.recognize(
           capturedImage,
           'eng',
           {
-            logger: m => console.log("Tesseract progress:", m.status, m.progress)
+            logger: (m: any) => console.log("Tesseract progress:", m.status, m.progress)
           }
         );
 
