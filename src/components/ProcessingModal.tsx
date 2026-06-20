@@ -100,21 +100,35 @@ export const ProcessingModal: React.FC<ProcessingModalProps> = ({
     const runOCR = async () => {
       try {
         setSteps(prev => prev.map(step =>
-          step.id === 'ocr' ? { ...step, status: 'processing', description: 'Processando texto da imagem...' } : step
+          step.id === 'ocr' ? { ...step, status: 'processing', description: 'Inicializando motor OCR...' } : step
         ));
 
         // Importar tesseract.js dinamicamente para evitar travamento na inicialização
         const tesseractModule = await import("tesseract.js");
         const tesseractInstance = tesseractModule.default || tesseractModule;
 
-        // Executar OCR usando tesseract.js
-        const result = await tesseractInstance.recognize(
-          capturedImage,
-          'eng',
-          {
-            logger: (m: any) => console.log("Tesseract progress:", m.status, m.progress)
-          }
-        );
+        setSteps(prev => prev.map(step =>
+          step.id === 'ocr' ? { ...step, description: 'Configurando parâmetros de placa...' } : step
+        ));
+
+        // Criar o Worker para configurações avançadas de OCR
+        const worker = await tesseractInstance.createWorker('eng');
+        
+        // Otimizar para ler apenas uma única linha (PSM 7) contendo apenas letras e números (whitelist)
+        await worker.setParameters({
+          tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',
+          tessedit_pageseg_mode: '7' as any, // 7 = Treat the image as a single text line
+        });
+
+        setSteps(prev => prev.map(step =>
+          step.id === 'ocr' ? { ...step, description: 'Lendo caracteres da imagem...' } : step
+        ));
+
+        // Executar a leitura
+        const result = await worker.recognize(capturedImage);
+        
+        // Encerrar o worker após a leitura para liberar memória do navegador
+        await worker.terminate();
 
         const ocrText = result.data.text;
         console.log("OCR Texto bruto detectado:", ocrText);
