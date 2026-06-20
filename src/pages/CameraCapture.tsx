@@ -288,6 +288,8 @@ const CameraCapture = () => {
 
         {/* Action Buttons */}
         <div className="space-y-4">
+          {!capturedImage ? (
+            <>
               <div className="flex flex-col gap-3">
                 {!isStreamActive ? (
                   <Button
