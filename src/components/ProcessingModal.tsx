@@ -100,44 +100,93 @@ export const ProcessingModal: React.FC<ProcessingModalProps> = ({
     const runOCR = async () => {
       try {
         setSteps(prev => prev.map(step =>
-          step.id === 'ocr' ? { ...step, status: 'processing', description: 'Inicializando motor OCR...' } : step
+          step.id === 'ocr' ? { ...step, status: 'processing', description: 'Inicializando leitura da placa...' } : step
         ));
 
-        // Importar tesseract.js dinamicamente para evitar travamento na inicialização
-        const tesseractModule = await import("tesseract.js");
-        const tesseractInstance = tesseractModule.default || tesseractModule;
+        const token = import.meta.env.VITE_PLATE_RECOGNIZER_TOKEN;
+        let plate = "";
+
+        // ── Tentativa 1: Plate Recognizer API (especializada em ALPR) ──────────
+        if (token && token !== "YOUR_KEY_HERE") {
+          try {
+            setSteps(prev => prev.map(step =>
+              step.id === 'ocr' ? { ...step, description: 'Enviando imagem para reconhecimento especializado...' } : step
+            ));
+
+            // Converter dataURL para Blob para envio multipart
+            const res = await fetch(capturedImage);
+            const blob = await res.blob();
+
+            const formData = new FormData();
+            formData.append("upload", blob, "plate.jpg");
+            formData.append("regions", "br"); // foca em placas brasileiras
+
+            const apiResponse = await fetch("https://api.platerecognizer.com/v1/plate-reader/", {
+              method: "POST",
+              headers: {
+                Authorization: `Token ${token}`,
+              },
+              body: formData,
+            });
+
+            if (apiResponse.ok) {
+              const data = await apiResponse.json();
+              console.log("Plate Recognizer resultado:", data);
+
+              if (data.results && data.results.length > 0) {
+                // Pega a placa com maior score de confiança
+                const best = data.results.reduce((a: any, b: any) =>
+                  (b.score || 0) > (a.score || 0) ? b : a
+                );
+                plate = (best.plate || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+                console.log(`Plate Recognizer: "${plate}" (confiança: ${(best.score * 100).toFixed(1)}%)`);
+              }
+            } else {
+              const errText = await apiResponse.text();
+              console.warn("Plate Recognizer API erro:", apiResponse.status, errText);
+            }
+          } catch (apiErr) {
+            console.warn("Falha na Plate Recognizer API, usando fallback Tesseract:", apiErr);
+          }
+        }
+
+        // ── Tentativa 2: Tesseract (fallback) ────────────────────────────────
+        if (!plate) {
+          setSteps(prev => prev.map(step =>
+            step.id === 'ocr' ? { ...step, description: 'Tentando leitura local (OCR)...' } : step
+          ));
+
+          const tesseractModule = await import("tesseract.js");
+          const tesseractInstance = tesseractModule.default || tesseractModule;
+
+          // PSM 6 = bloco de texto uniforme
+          const worker = await tesseractInstance.createWorker('eng');
+          await worker.setParameters({
+            tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',
+            tessedit_pageseg_mode: '6' as any,
+          });
+          const result = await worker.recognize(capturedImage);
+          await worker.terminate();
+
+          const ocrText = result.data.text;
+          console.log("Tesseract OCR texto:", ocrText);
+          plate = extractPlate(ocrText);
+
+          // PSM 11 como segunda tentativa
+          if (!plate) {
+            const worker2 = await tesseractInstance.createWorker('eng');
+            await worker2.setParameters({
+              tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',
+              tessedit_pageseg_mode: '11' as any,
+            });
+            const result2 = await worker2.recognize(capturedImage);
+            await worker2.terminate();
+            plate = extractPlate(result2.data.text);
+          }
+        }
 
         setSteps(prev => prev.map(step =>
-          step.id === 'ocr' ? { ...step, description: 'Configurando parâmetros de placa...' } : step
-        ));
-
-        // Criar o Worker para configurações avançadas de OCR
-        const worker = await tesseractInstance.createWorker('eng');
-        
-        // Otimizar para ler apenas uma única linha (PSM 7) contendo apenas letras e números (whitelist)
-        await worker.setParameters({
-          tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',
-          tessedit_pageseg_mode: '7' as any, // 7 = Treat the image as a single text line
-        });
-
-        setSteps(prev => prev.map(step =>
-          step.id === 'ocr' ? { ...step, description: 'Lendo caracteres da imagem...' } : step
-        ));
-
-        // Executar a leitura
-        const result = await worker.recognize(capturedImage);
-        
-        // Encerrar o worker após a leitura para liberar memória do navegador
-        await worker.terminate();
-
-        const ocrText = result.data.text;
-        console.log("OCR Texto bruto detectado:", ocrText);
-        
-        const plate = extractPlate(ocrText);
-        console.log("Placa extraída:", plate);
-
-        setSteps(prev => prev.map(step =>
-          step.id === 'ocr' ? { ...step, status: 'completed', description: `✓ OCR concluído!` } : step
+          step.id === 'ocr' ? { ...step, status: 'completed', description: `✓ Leitura concluída!` } : step
         ));
 
         setConfirmedPlate(plate);

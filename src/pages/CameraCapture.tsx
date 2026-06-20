@@ -15,6 +15,7 @@ const CameraCapture = () => {
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [isCameraActive, setIsCameraActive] = useState(false);
+  const [isFrontCamera, setIsFrontCamera] = useState(false);
   const [showProcessingModal, setShowProcessingModal] = useState(false);
   const [showClientModal, setShowClientModal] = useState(false);
   const [vehicleDataForClient, setVehicleDataForClient] = useState<any>(null);
@@ -114,16 +115,34 @@ const CameraCapture = () => {
     }
 
     try {
-      let mediaStream;
+      let mediaStream: MediaStream;
+      let usedFrontCamera = false;
+
+      // Primeiro tenta câmera traseira (celular). Se não existir, usa qualquer câmera (notebook).
       try {
         mediaStream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: "environment" }
+          video: {
+            facingMode: { ideal: "environment" },
+            width: { ideal: 1920 },
+            height: { ideal: 1080 }
+          }
         });
+        // Verifica se realmente obteve câmera traseira ou foi fallback para frontal
+        const track = mediaStream.getVideoTracks()[0];
+        const settings = track.getSettings();
+        usedFrontCamera = settings.facingMode === "user" || !settings.facingMode;
       } catch (e) {
-        console.warn("Câmera traseira não disponível, tentando qualquer câmera:", e);
-        mediaStream = await navigator.mediaDevices.getUserMedia({ video: true });
+        console.warn("Câmera traseira não disponível, usando câmera do notebook:", e);
+        mediaStream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            width: { ideal: 1920 },
+            height: { ideal: 1080 }
+          }
+        });
+        usedFrontCamera = true;
       }
 
+      setIsFrontCamera(usedFrontCamera);
       setStream(mediaStream);
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream;
@@ -148,15 +167,72 @@ const CameraCapture = () => {
 
   const handleImageUpload = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const result = e.target?.result as string;
-        setCapturedImage(result);
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const rawDataUrl = e.target?.result as string;
+
+      // Pré-processar a imagem carregada pelo mesmo pipeline da câmera
+      // para garantir que o OCR receba uma imagem otimizada
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+
+        // Limitar resolução máxima a 1920px para não sobrecarregar o OCR
+        const MAX_DIM = 1920;
+        let { width, height } = img;
+        if (width > MAX_DIM || height > MAX_DIM) {
+          const ratio = Math.min(MAX_DIM / width, MAX_DIM / height);
+          width = Math.round(width * ratio);
+          height = Math.round(height * ratio);
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          setCapturedImage(rawDataUrl);
+          stopCamera();
+          return;
+        }
+
+        ctx.drawImage(img, 0, 0, width, height);
+
+        // Aplicar escala de cinza + contraste leve (igual ao pipeline da câmera)
+        try {
+          const imgData = ctx.getImageData(0, 0, width, height);
+          const data = imgData.data;
+          for (let i = 0; i < data.length; i += 4) {
+            const r = data[i];
+            const g = data[i + 1];
+            const b = data[i + 2];
+            const gray = 0.299 * r + 0.587 * g + 0.114 * b;
+            const contrast = 30;
+            const factor = (259 * (contrast + 255)) / (255 * (259 - contrast));
+            let newVal = factor * (gray - 128) + 128;
+            newVal = Math.max(0, Math.min(255, newVal));
+            data[i] = newVal;
+            data[i + 1] = newVal;
+            data[i + 2] = newVal;
+          }
+          ctx.putImageData(imgData, 0, 0);
+        } catch (err) {
+          console.error("Erro ao pré-processar imagem carregada:", err);
+        }
+
+        const processed = canvas.toDataURL("image/jpeg", 0.95);
+        setCapturedImage(processed);
         stopCamera();
       };
-      reader.readAsDataURL(file);
-    }
+      img.onerror = () => {
+        // Fallback: usa a imagem bruta se não conseguir processar
+        setCapturedImage(rawDataUrl);
+        stopCamera();
+      };
+      img.src = rawDataUrl;
+    };
+    reader.readAsDataURL(file);
   }, [stopCamera]);
 
   const capturePhoto = useCallback(() => {
@@ -178,33 +254,26 @@ const CameraCapture = () => {
         return;
       }
 
-      // O overlay na tela é w-3/4 (75%) e h-1/3 (33%) centralizado.
-      // Vamos recortar exatamente essa área para focar apenas na placa.
-      const cropWidth = videoWidth * 0.75;
-      const cropHeight = videoHeight * 0.35; // 35% de altura para margem
-      const cropX = (videoWidth - cropWidth) / 2;
-      const cropY = (videoHeight - cropHeight) / 2;
-
-      canvas.width = cropWidth;
-      canvas.height = cropHeight;
+      // Captura o frame inteiro para não perder a placa por desalinhamento.
+      // O OCR recebe a imagem completa e o Tesseract localiza os caracteres.
+      canvas.width = videoWidth;
+      canvas.height = videoHeight;
 
       if (context) {
-        // Desenha apenas a região recortada da placa
-        context.drawImage(
-          video,
-          cropX,
-          cropY,
-          cropWidth,
-          cropHeight,
-          0,
-          0,
-          cropWidth,
-          cropHeight
-        );
+        // Corrige espelhamento da câmera frontal de notebook
+        if (isFrontCamera) {
+          context.translate(videoWidth, 0);
+          context.scale(-1, 1);
+        }
 
-        // Aplicar escala de cinza e contraste para otimizar leitura do OCR
+        context.drawImage(video, 0, 0, videoWidth, videoHeight);
+
+        // Resetar transformação antes de ler os pixels
+        context.setTransform(1, 0, 0, 1, 0, 0);
+
+        // Aplicar escala de cinza e contraste leve para melhorar OCR
         try {
-          const imgData = context.getImageData(0, 0, cropWidth, cropHeight);
+          const imgData = context.getImageData(0, 0, videoWidth, videoHeight);
           const data = imgData.data;
           for (let i = 0; i < data.length; i += 4) {
             const r = data[i];
@@ -212,13 +281,11 @@ const CameraCapture = () => {
             const b = data[i + 2];
             // Escala de cinza
             const gray = 0.299 * r + 0.587 * g + 0.114 * b;
-            
-            // Filtro de contraste moderado
-            const contrast = 40; 
+            // Contraste leve para não destruir detalhes
+            const contrast = 30;
             const factor = (259 * (contrast + 255)) / (255 * (259 - contrast));
             let newVal = factor * (gray - 128) + 128;
             newVal = Math.max(0, Math.min(255, newVal));
-
             data[i] = newVal;
             data[i + 1] = newVal;
             data[i + 2] = newVal;
@@ -228,12 +295,12 @@ const CameraCapture = () => {
           console.error("Erro ao aplicar filtros:", e);
         }
 
-        const imageData = canvas.toDataURL("image/jpeg", 0.9);
+        const imageData = canvas.toDataURL("image/jpeg", 0.95);
         setCapturedImage(imageData);
         stopCamera();
       }
     }
-  }, [stopCamera]);
+  }, [stopCamera, isFrontCamera]);
 
   const retakePhoto = useCallback(() => {
     setCapturedImage(null);
@@ -301,7 +368,9 @@ const CameraCapture = () => {
                     autoPlay
                     playsInline
                     muted
-                    className="w-full h-full object-cover"
+                    className={`w-full h-full object-cover ${
+                      isFrontCamera ? "scale-x-[-1]" : ""
+                    }`}
                   />
                   <canvas ref={canvasRef} className="hidden" />
                   
@@ -313,6 +382,11 @@ const CameraCapture = () => {
                       </span>
                     </div>
                   </div>
+                  {isFrontCamera && (
+                    <div className="absolute top-2 right-2 bg-black/50 text-white text-[10px] px-2 py-0.5 rounded">
+                      📷 Câmera frontal
+                    </div>
+                  )}
                 </>
               ) : (
                 <img
