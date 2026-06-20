@@ -1,4 +1,4 @@
-import React, { useRef, useState, useCallback } from "react";
+import React, { useRef, useState, useCallback, useEffect } from "react";
 import { Camera, RotateCcw, Check, ArrowLeft, Loader2, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -14,7 +14,7 @@ const CameraCapture = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
-  const [isStreamActive, setIsStreamActive] = useState(false);
+  const [isCameraActive, setIsCameraActive] = useState(false);
   const [showProcessingModal, setShowProcessingModal] = useState(false);
   const [showClientModal, setShowClientModal] = useState(false);
   const [vehicleDataForClient, setVehicleDataForClient] = useState<any>(null);
@@ -98,7 +98,7 @@ const CameraCapture = () => {
   }, [manualPlate]);
 
   const startCamera = useCallback(async () => {
-    // Verificar se a API de mídia está disponível (bloqueada pelo navegador em conexões HTTP sem SSL/HTTPS)
+    // Verificar se a API de mídia está disponível (bloqueada em HTTP fora de localhost)
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       toast({
         title: "Câmera indisponível (Requer HTTPS)",
@@ -111,28 +111,29 @@ const CameraCapture = () => {
     try {
       let mediaStream;
       try {
-        // Tenta abrir a câmera traseira (comum em celulares)
         mediaStream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: "environment" }
         });
       } catch (e) {
-        console.warn("Câmera traseira não disponível, tentando qualquer câmera disponível:", e);
-        // Fallback para qualquer câmera disponível (comum em notebooks)
-        mediaStream = await navigator.mediaDevices.getUserMedia({
-          video: true
-        });
+        console.warn("Câmera traseira não disponível, tentando qualquer câmera:", e);
+        mediaStream = await navigator.mediaDevices.getUserMedia({ video: true });
       }
-      
+
       setStream(mediaStream);
-      setIsStreamActive(true);
+      setIsCameraActive(true);
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream;
+        // Aguardar o video comecar a tocar para garantir o estado
+        videoRef.current.onloadedmetadata = () => {
+          setIsCameraActive(true);
+        };
       }
     } catch (error) {
       console.error("Erro ao acessar a câmera:", error);
+      setIsCameraActive(false);
       toast({
         title: "Erro ao acessar a câmera",
-        description: "Não foi possível ativar a câmera. Verifique as permissões de privacidade no seu navegador ou use a opção 'Carregar Imagem'.",
+        description: "Não foi possível ativar a câmera. Verifique as permissões ou use 'Carregar Imagem'.",
         variant: "destructive"
       });
     }
@@ -142,7 +143,7 @@ const CameraCapture = () => {
     if (stream) {
       stream.getTracks().forEach(track => track.stop());
       setStream(null);
-      setIsStreamActive(false);
+      setIsCameraActive(false);
     }
   }, [stream]);
 
@@ -319,27 +320,19 @@ const CameraCapture = () => {
             {!capturedImage ? (
               <>
                 <div className="flex flex-col gap-2">
-                  {!isStreamActive ? (
-                    <Button
-                      onClick={startCamera}
-                      variant="camera"
-                      size="lg"
-                      className="w-full h-11 text-sm"
-                    >
-                      <Camera className="h-4 w-4 mr-2" />
-                      Iniciar Câmera
-                    </Button>
-                  ) : (
-                    <Button
-                      onClick={capturePhoto}
-                      variant="camera"
-                      size="lg"
-                      className="w-full h-11 text-sm bg-wash-blue text-white hover:bg-wash-blue/90"
-                    >
-                      <Camera className="h-4 w-4 mr-2" />
-                      Capturar Foto
-                    </Button>
-                  )}
+                  <Button
+                    onClick={isCameraActive ? capturePhoto : startCamera}
+                    variant="camera"
+                    size="lg"
+                    className={`w-full h-11 text-sm ${
+                      isCameraActive
+                        ? "bg-wash-blue text-white hover:bg-wash-blue/90"
+                        : ""
+                    }`}
+                  >
+                    <Camera className="h-4 w-4 mr-2" />
+                    {isCameraActive ? "Capturar Foto" : "Iniciar Câmera"}
+                  </Button>
 
                   <input
                     type="file"
