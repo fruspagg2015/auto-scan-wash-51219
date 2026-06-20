@@ -49,7 +49,7 @@ const clientSchema = z.object({
   email: z.string().trim().email("Email inválido").max(255, "Email deve ter no máximo 255 caracteres").optional().or(z.literal("")),
   endereco: z.string().trim().max(255, "Endereço deve ter no máximo 255 caracteres").optional(),
   numero: z.string().trim().max(50, "Número deve ter no máximo 50 caracteres").optional(),
-  documento: z.string().trim().max(50, "Documento deve ter no máximo 50 caracteres").optional(),
+  documento: z.string().trim().max(50, "Documento deve ter no máximo 50 caracteres").optional().or(z.literal("")),
   cidade: z.string().trim().max(100, "Cidade deve ter no máximo 100 caracteres").optional(),
   tipo: z.enum(["Pessoa Física", "Pessoa Jurídica"]),
   observacoes: z.string().trim().max(500, "Observações devem ter no máximo 500 caracteres").optional(),
@@ -118,11 +118,15 @@ export default function Clientes() {
     loadClients()
   }, [currentCompanyId])
 
-  const filteredClientes = clients.filter(cliente =>
-    cliente.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (cliente.email && cliente.email.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    cliente.telefone.includes(searchTerm)
-  )
+  const filteredClientes = clients.filter(cliente => {
+    const term = searchTerm.toLowerCase()
+    const cleanTerm = searchTerm.replace(/\D/g, '')
+    const cleanPhone = cliente.telefone.replace(/\D/g, '')
+    return cliente.nome.toLowerCase().includes(term) ||
+      (cliente.email && cliente.email.toLowerCase().includes(term)) ||
+      cliente.telefone.includes(searchTerm) ||
+      (cleanTerm && cleanPhone.includes(cleanTerm))
+  })
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -271,6 +275,27 @@ export default function Clientes() {
     setFormData({...formData, telefone: formatted})
   }
 
+  const formatDocument = (value: string) => {
+    const numbers = value.replace(/\D/g, '').substring(0, 14)
+    if (numbers.length <= 11) {
+      return numbers
+        .replace(/(\d{3})(\d)/, '$1.$2')
+        .replace(/(\d{3})(\d)/, '$1.$2')
+        .replace(/(\d{3})(\d{1,2})$/, '$1-$2')
+    } else {
+      return numbers
+        .replace(/^(\d{2})(\d)/, '$1.$2')
+        .replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3')
+        .replace(/\.(\d{3})(\d)/, '.$1/$2')
+        .replace(/(\d{4})(\d{1,2})$/, '$1-$2')
+    }
+  }
+
+  const handleDocumentChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const formatted = formatDocument(e.target.value)
+    setFormData({...formData, documento: formatted})
+  }
+
   const handleNewClient = () => {
     setEditingClient(null)
     setFormData({
@@ -361,8 +386,9 @@ export default function Clientes() {
                   <Input
                     id="documento"
                     value={formData.documento}
-                    onChange={(e) => setFormData({...formData, documento: e.target.value})}
-                    placeholder="000.000.000-00"
+                    onChange={handleDocumentChange}
+                    placeholder="000.000.000-00 ou 00.000.000/0000-00"
+                    maxLength={18}
                   />
                 </div>
 

@@ -46,7 +46,6 @@ const getMenuItems = (userRole: string) => {
 
   const adminMainItems = [
     { title: "Dashboard", url: "/dashboard", icon: BarChart3, description: "Visão geral do sistema" },
-    { title: "Novo Atendimento", url: "/camera", icon: Camera, description: "Iniciar novo atendimento" },
   ];
 
   const cadastroItems = [
@@ -65,6 +64,7 @@ const getMenuItems = (userRole: string) => {
   ];
 
   const quickActions = [
+    { title: "Novo Atendimento", url: "/camera", icon: Camera, description: "Iniciar novo atendimento" },
     { title: "Concluir Veículo", url: "/concluir-veiculo", icon: ClipboardCheck, description: "Finalizar veículos em andamento" },
     { title: "Entregar Veículo", url: "/entregar-veiculo", icon: CheckCircle, description: "Finalizar e entregar veículo" },
   ];
