@@ -7,6 +7,7 @@ import { useNavigate } from "react-router-dom";
 import { ProcessingModal } from "@/components/ProcessingModal";
 import { ClientDataModal } from "@/components/ClientDataModal";
 import { supabase } from "@/integrations/supabase/client";
+import { toast } from "@/hooks/use-toast";
 
 const CameraCapture = () => {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -98,9 +99,20 @@ const CameraCapture = () => {
 
   const startCamera = useCallback(async () => {
     try {
-      const mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "environment" }
-      });
+      let mediaStream;
+      try {
+        // Tenta abrir a câmera traseira (comum em celulares)
+        mediaStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: "environment" }
+        });
+      } catch (e) {
+        console.warn("Câmera traseira não disponível, tentando qualquer câmera disponível:", e);
+        // Fallback para qualquer câmera disponível (comum em notebooks)
+        mediaStream = await navigator.mediaDevices.getUserMedia({
+          video: true
+        });
+      }
+      
       setStream(mediaStream);
       setIsStreamActive(true);
       if (videoRef.current) {
@@ -108,6 +120,11 @@ const CameraCapture = () => {
       }
     } catch (error) {
       console.error("Erro ao acessar a câmera:", error);
+      toast({
+        title: "Erro ao acessar a câmera",
+        description: "Não foi possível ativar a câmera. Verifique as permissões de privacidade no seu navegador ou use a opção 'Carregar Imagem'.",
+        variant: "destructive"
+      });
     }
   }, []);
 
@@ -236,167 +253,167 @@ const CameraCapture = () => {
   }, []);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-wash-blue-light to-background p-4">
-      <div className="max-w-md mx-auto">
-        {/* Header */}
-        <div className="flex items-center gap-4 mb-6">
-          <Button 
-            variant="ghost" 
-            size="icon"
-            onClick={() => navigate("/")}
-            className="rounded-full"
-          >
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-          <h1 className="text-2xl font-bold text-wash-blue">
-            📷 Capturar Placa
-          </h1>
-        </div>
+    <div className="min-h-screen bg-gradient-to-br from-wash-blue-light to-background p-3 flex flex-col justify-between">
+      <div className="max-w-md mx-auto w-full flex-1 flex flex-col justify-between">
+        <div>
+          {/* Header */}
+          <div className="flex items-center gap-4 mb-3">
+            <Button 
+              variant="ghost" 
+              size="icon"
+              onClick={() => navigate("/")}
+              className="rounded-full h-8 w-8"
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
+            <h1 className="text-xl font-bold text-wash-blue">
+              📷 Capturar Placa
+            </h1>
+          </div>
 
-        {/* Camera/Image Display */}
-        <Card className="mb-6 overflow-hidden shadow-soft">
-          <div className="relative aspect-[4/3] bg-gray-100">
-            {!capturedImage ? (
-              <>
-                <video
-                  ref={videoRef}
-                  autoPlay
-                  playsInline
-                  muted
+          {/* Camera/Image Display */}
+          <Card className="mb-3 overflow-hidden shadow-soft">
+            <div className="relative aspect-[4/3] bg-gray-100">
+              {!capturedImage ? (
+                <>
+                  <video
+                    ref={videoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    className="w-full h-full object-cover"
+                  />
+                  <canvas ref={canvasRef} className="hidden" />
+                  
+                  {/* Camera Overlay */}
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <div className="border-2 border-white/80 rounded-lg w-3/4 h-1/3 flex items-center justify-center">
+                      <span className="text-white/80 text-xs font-medium bg-black/30 px-2 py-0.5 rounded">
+                        Posicione a placa aqui
+                      </span>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <img
+                  src={capturedImage}
+                  alt="Foto capturada"
                   className="w-full h-full object-cover"
                 />
-                <canvas ref={canvasRef} className="hidden" />
-                
-                {/* Camera Overlay */}
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                  <div className="border-2 border-white/80 rounded-lg w-3/4 h-1/3 flex items-center justify-center">
-                    <span className="text-white/80 text-sm font-medium bg-black/30 px-2 py-1 rounded">
-                      Posicione a placa aqui
-                    </span>
-                  </div>
+              )}
+            </div>
+          </Card>
+
+          {/* Action Buttons */}
+          <div className="space-y-2">
+            {!capturedImage ? (
+              <>
+                <div className="flex flex-col gap-2">
+                  {!isStreamActive ? (
+                    <Button
+                      onClick={startCamera}
+                      variant="camera"
+                      size="lg"
+                      className="w-full h-11 text-sm"
+                    >
+                      <Camera className="h-4 w-4 mr-2" />
+                      Iniciar Câmera
+                    </Button>
+                  ) : (
+                    <Button
+                      onClick={capturePhoto}
+                      variant="camera"
+                      size="lg"
+                      className="w-full h-11 text-sm bg-wash-blue text-white hover:bg-wash-blue/90"
+                    >
+                      <Camera className="h-4 w-4 mr-2" />
+                      Capturar Foto
+                    </Button>
+                  )}
+
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageUpload}
+                    className="hidden"
+                    id="file-upload"
+                  />
+                  
+                  <Button
+                    variant="outline"
+                    size="lg"
+                    onClick={() => document.getElementById("file-upload")?.click()}
+                    className="w-full h-11 text-sm border-wash-blue text-wash-blue hover:bg-wash-blue/10 bg-white"
+                  >
+                    <Upload className="h-4 w-4 mr-2" />
+                    Carregar Imagem
+                  </Button>
                 </div>
               </>
             ) : (
-              <img
-                src={capturedImage}
-                alt="Foto capturada"
-                className="w-full h-full object-cover"
-              />
-            )}
-          </div>
-        </Card>
-
-        {/* Action Buttons */}
-        <div className="space-y-4">
-          {!capturedImage ? (
-            <>
-              <div className="flex flex-col gap-3">
-                {!isStreamActive ? (
-                  <Button
-                    onClick={startCamera}
-                    variant="camera"
-                    size="lg"
-                    className="w-full"
-                  >
-                    <Camera className="h-5 w-5 mr-2" />
-                    Iniciar Câmera
-                  </Button>
-                ) : (
-                  <Button
-                    onClick={capturePhoto}
-                    variant="camera"
-                    size="lg"
-                    className="w-full"
-                  >
-                    <Camera className="h-5 w-5 mr-2" />
-                    Capturar Foto
-                  </Button>
-                )}
-
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handleImageUpload}
-                  className="hidden"
-                  id="file-upload"
-                />
-                
+              <div className="grid grid-cols-2 gap-3">
                 <Button
+                  onClick={retakePhoto}
                   variant="outline"
                   size="lg"
-                  onClick={() => document.getElementById("file-upload")?.click()}
-                  className="w-full border-wash-blue text-wash-blue hover:bg-wash-blue/10 bg-white"
+                  className="w-full h-11 text-sm"
                 >
-                  <Upload className="h-5 w-5 mr-2" />
-                  Carregar Imagem
+                  <RotateCcw className="h-4 w-4 mr-2" />
+                  Recapturar
+                </Button>
+                <Button
+                  onClick={confirmPhoto}
+                  variant="confirm"
+                  size="lg"
+                  className="w-full h-11 text-sm"
+                >
+                  <Check className="h-4 w-4 mr-2" />
+                  Confirmar
                 </Button>
               </div>
-            </>
-          ) : (
-            <div className="grid grid-cols-2 gap-4">
-              <Button
-                onClick={retakePhoto}
-                variant="outline"
-                size="lg"
-                className="w-full"
-              >
-                <RotateCcw className="h-5 w-5" />
-                Recapturar
-              </Button>
-              <Button
-                onClick={confirmPhoto}
-                variant="confirm"
-                size="lg"
-                className="w-full"
-              >
-                <Check className="h-5 w-5" />
-                Confirmar
-              </Button>
-            </div>
-          )}
+            )}
+          </div>
         </div>
 
-        {/* Manual Plate Entry */}
-        <Card className="mt-6 p-4 shadow-soft border-wash-blue/10 bg-white">
-          <div className="space-y-3">
-            <div className="flex flex-col">
-              <h3 className="text-sm font-semibold text-wash-blue">
-                Sem câmera? Digite a placa manualmente
-              </h3>
-              <p className="text-xs text-muted-foreground">
-                Buscaremos os dados do veículo no sistema.
-              </p>
+        <div>
+          {/* Manual Plate Entry */}
+          <Card className="mt-3 p-3 shadow-soft border-wash-blue/10 bg-white">
+            <div className="space-y-2">
+              <div className="flex flex-col">
+                <h3 className="text-xs font-semibold text-wash-blue">
+                  Sem câmera? Digite a placa manualmente
+                </h3>
+              </div>
+              <div className="flex gap-2">
+                <Input
+                  placeholder="ABC1D23"
+                  value={manualPlate}
+                  onChange={(e) => setManualPlate(e.target.value.replace(/[^a-zA-Z0-9]/g, '').substring(0, 7).toUpperCase())}
+                  className="font-mono text-center text-base tracking-widest uppercase flex-1 h-9 border-wash-blue/20 focus-visible:ring-wash-blue"
+                  maxLength={7}
+                />
+                <Button 
+                  onClick={handleManualSearch} 
+                  disabled={manualPlate.length < 7 || isSearchingPlate}
+                  className="bg-wash-blue hover:bg-wash-blue/90 h-9 px-4 text-xs font-medium text-white"
+                >
+                  {isSearchingPlate ? <Loader2 className="h-3 w-3 animate-spin" /> : "Buscar"}
+                </Button>
+              </div>
             </div>
-            <div className="flex gap-2">
-              <Input
-                placeholder="ABC1D23"
-                value={manualPlate}
-                onChange={(e) => setManualPlate(e.target.value.replace(/[^a-zA-Z0-9]/g, '').substring(0, 7).toUpperCase())}
-                className="font-mono text-center text-lg tracking-widest uppercase flex-1 h-11 border-wash-blue/20 focus-visible:ring-wash-blue"
-                maxLength={7}
-              />
-              <Button 
-                onClick={handleManualSearch} 
-                disabled={manualPlate.length < 7 || isSearchingPlate}
-                className="bg-wash-blue hover:bg-wash-blue/90 h-11 px-6 font-medium text-white"
-              >
-                {isSearchingPlate ? <Loader2 className="h-4 w-4 animate-spin" /> : "Buscar"}
-              </Button>
-            </div>
-          </div>
-        </Card>
+          </Card>
 
-        {/* Instructions */}
-        <Card className="mt-6 p-4 bg-wash-blue-light/30 border-wash-blue/20">
-          <div className="text-center text-sm text-wash-blue">
-            <h3 className="font-semibold mb-2">💡 Dicas para melhor captura:</h3>
-            <ul className="space-y-1 text-left">
-              <li>• Posicione a placa dentro do quadro</li>
-              <li>• Certifique-se de ter boa iluminação</li>
-              <li>• Mantenha o celular firme</li>
-            </ul>
-          </div>
-        </Card>
+          {/* Instructions */}
+          <Card className="mt-3 p-2.5 bg-wash-blue-light/30 border-wash-blue/20">
+            <div className="text-center text-xs text-wash-blue">
+              <h3 className="font-semibold mb-1">💡 Dicas para melhor captura:</h3>
+              <ul className="space-y-0.5 text-left inline-block">
+                <li>• Posicione a placa dentro do quadro</li>
+                <li>• Certifique-se de ter boa iluminação e foco</li>
+              </ul>
+            </div>
+          </Card>
+        </div>
 
         {/* Modals */}
         <ProcessingModal
