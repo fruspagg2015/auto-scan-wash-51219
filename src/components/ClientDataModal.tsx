@@ -18,9 +18,10 @@ interface ClientDataModalProps {
   vehicleData: any;
 }
 
-const formatPhone = (value: string) => {
+const formatPhone = (value: any) => {
   if (!value) return "";
-  let digits = value.replace(/\D/g, '');
+  const strValue = String(value);
+  let digits = strValue.replace(/\D/g, '');
   // Remove o DDI 55 se vier da API
   if (digits.startsWith("55") && digits.length >= 12) {
     digits = digits.substring(2);
@@ -59,16 +60,20 @@ export const ClientDataModal: React.FC<ClientDataModalProps> = ({
 
   useEffect(() => {
     if (isOpen && vehicleData) {
-      setFormData({
-        nome: vehicleData.cliente?.nome || "",
-        telefone: vehicleData.cliente?.telefone ? formatPhone(vehicleData.cliente.telefone) : "",
-        email: "",
-        modelo: vehicleData.modelo || "",
-        marca: vehicleData.marca || "",
-        ano: vehicleData.ano || "",
-        cor: vehicleData.cor || ""
-      });
-      setErrors({});
+      try {
+        setFormData({
+          nome: vehicleData.cliente?.nome || "",
+          telefone: vehicleData.cliente?.telefone ? formatPhone(vehicleData.cliente.telefone) : "",
+          email: "",
+          modelo: vehicleData.modelo || "",
+          marca: vehicleData.marca || "",
+          ano: vehicleData.ano || "",
+          cor: vehicleData.cor || ""
+        });
+        setErrors({});
+      } catch (err) {
+        console.error("Erro ao preencher dados do modal:", err);
+      }
     }
   }, [isOpen, vehicleData]);
 
