@@ -361,33 +361,24 @@ const CameraCapture = () => {
           {/* Área da câmera / imagem */}
           <Card className="mb-3 overflow-hidden shadow-soft">
             <div className="relative aspect-[4/3] bg-gray-900">
-              {/* <video> mantido SEMPRE no DOM, apenas escondido visualmente,
-                  para evitar crash em mobile browsers ao desmontar o componente de mídia */}
-              <video
-                ref={videoRef}
-                autoPlay
-                playsInline
-                muted
-                onCanPlay={handleVideoCanPlay}
-                className={`w-full h-full object-cover absolute top-0 left-0 ${
-                  isFrontCamera ? "scale-x-[-1]" : ""
-                } ${capturedImage ? "opacity-0 pointer-events-none" : ""}`}
-              />
-              <canvas ref={canvasRef} className="hidden" />
-
-              {capturedImage && (
-                <img
-                  src={capturedImage}
-                  alt="Foto capturada"
-                  className="w-full h-full object-cover absolute top-0 left-0 z-10"
-                />
-              )}
-
-              {!capturedImage && (
+              {!capturedImage ? (
                 <>
+                  {/* <video> sempre no DOM para o useEffect poder atribuir srcObject */}
+                  <video
+                    ref={videoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    onCanPlay={handleVideoCanPlay}
+                    className={`w-full h-full object-cover ${
+                      isFrontCamera ? "scale-x-[-1]" : ""
+                    }`}
+                  />
+                  <canvas ref={canvasRef} className="hidden" />
+
                   {/* Overlay de enquadramento */}
                   {isCameraActive && (
-                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                       <div className="border-2 border-white/80 rounded-lg w-3/4 h-1/3 flex items-center justify-center">
                         <span className="text-white/80 text-xs font-medium bg-black/30 px-2 py-0.5 rounded">
                           Posicione a placa aqui
@@ -397,14 +388,14 @@ const CameraCapture = () => {
                   )}
 
                   {isCameraActive && isFrontCamera && (
-                    <div className="absolute top-2 right-2 bg-black/50 text-white text-[10px] px-2 py-0.5 rounded z-10">
+                    <div className="absolute top-2 right-2 bg-black/50 text-white text-[10px] px-2 py-0.5 rounded">
                       📷 Câmera frontal
                     </div>
                   )}
 
                   {/* Spinner de carregamento */}
                   {isCameraLoading && (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 z-20">
+                    <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60">
                       <Loader2 className="h-10 w-10 text-white animate-spin mb-2" />
                       <span className="text-white text-sm font-medium">
                         Iniciando câmera...
@@ -414,12 +405,18 @@ const CameraCapture = () => {
 
                   {/* Placeholder quando câmera inativa */}
                   {!isCameraActive && !isCameraLoading && (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-400 z-10">
+                    <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-400">
                       <Camera className="h-12 w-12 mb-2 opacity-30" />
                       <span className="text-xs opacity-50">Câmera desligada</span>
                     </div>
                   )}
                 </>
+              ) : (
+                <img
+                  src={capturedImage}
+                  alt="Foto capturada"
+                  className="w-full h-full object-cover"
+                />
               )}
             </div>
           </Card>
