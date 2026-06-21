@@ -98,8 +98,8 @@ const CameraCapture = () => {
         });
         const settings =
           mediaStream.getVideoTracks()[0]?.getSettings?.() ?? {};
-        usedFront =
-          settings.facingMode === "user" || settings.facingMode === undefined;
+        // Se pediu environment e conseguiu, assume traseira se for undefined.
+        usedFront = settings.facingMode === "user";
       } catch {
         mediaStream = await navigator.mediaDevices.getUserMedia({
           video: true,
@@ -146,10 +146,9 @@ const CameraCapture = () => {
     }
 
     try {
-      // Limita a 1280×720 — câmeras mobile de alta resolução causam OOM
-      const MAX_W = 1280;
-      const MAX_H = 720;
-      const scale = Math.min(1, MAX_W / srcW, MAX_H / srcH);
+      // Redimensiona mantendo a proporção. O maior lado será no máximo 1280px.
+      const MAX_DIM = 1280;
+      const scale = Math.min(1, MAX_DIM / srcW, MAX_DIM / srcH);
       const w = Math.round(srcW * scale);
       const h = Math.round(srcH * scale);
 
@@ -162,13 +161,9 @@ const CameraCapture = () => {
         return;
       }
 
-      // Espelha câmera frontal (notebook / selfie)
-      if (isFrontCamera) {
-        ctx.translate(w, 0);
-        ctx.scale(-1, 1);
-      }
+      // Desenhamos a imagem original da câmera, sem espelhar, 
+      // para garantir que o texto da placa NUNCA fique invertido (trás pra frente)
       ctx.drawImage(video, 0, 0, srcW, srcH, 0, 0, w, h);
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
 
       // O Plate Recognizer API não necessita de filtro de contraste manual
       // Removemos o getImageData loop para evitar OOM e travamentos no mobile
