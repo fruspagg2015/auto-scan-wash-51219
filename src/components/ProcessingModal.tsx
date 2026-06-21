@@ -113,9 +113,23 @@ export const ProcessingModal: React.FC<ProcessingModalProps> = ({
               step.id === 'ocr' ? { ...step, description: 'Enviando imagem para reconhecimento especializado...' } : step
             ));
 
-            // Converter dataURL para Blob para envio multipart
-            const res = await fetch(capturedImage);
-            const blob = await res.blob();
+            // Converter dataURL para Blob de forma segura (fallback para iOS WebView)
+            let blob: Blob;
+            try {
+              const res = await fetch(capturedImage);
+              blob = await res.blob();
+            } catch (fetchErr) {
+              const arr = capturedImage.split(',');
+              const mimeMatch = arr[0].match(/:(.*?);/);
+              const mime = mimeMatch ? mimeMatch[1] : "image/jpeg";
+              const bstr = atob(arr[1]);
+              let n = bstr.length;
+              const u8arr = new Uint8Array(n);
+              while(n--){
+                  u8arr[n] = bstr.charCodeAt(n);
+              }
+              blob = new Blob([u8arr], {type:mime});
+            }
 
             const formData = new FormData();
             formData.append("upload", blob, "plate.jpg");
