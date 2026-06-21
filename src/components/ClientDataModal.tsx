@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "@/hooks/use-toast";
+import { saveClientApi } from "@/services/clientApi";
 
 interface ClientDataModalProps {
   isOpen: boolean;
@@ -16,6 +17,25 @@ interface ClientDataModalProps {
   onCancel: () => void;
   vehicleData: any;
 }
+
+const formatPhone = (value: string) => {
+  if (!value) return "";
+  let digits = value.replace(/\D/g, '');
+  // Remove o DDI 55 se vier da API
+  if (digits.startsWith("55") && digits.length >= 12) {
+    digits = digits.substring(2);
+  }
+  
+  if (digits.length <= 2) {
+    return `(${digits}`;
+  } else if (digits.length <= 6) {
+    return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+  } else if (digits.length <= 10) {
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
+  } else {
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7, 11)}`;
+  }
+};
 
 export const ClientDataModal: React.FC<ClientDataModalProps> = ({
   isOpen,
@@ -25,8 +45,8 @@ export const ClientDataModal: React.FC<ClientDataModalProps> = ({
 }) => {
   const { currentCompanyId } = useAuth();
   const [formData, setFormData] = useState({
-    nome: "",
-    telefone: "",
+    nome: vehicleData?.cliente?.nome || "",
+    telefone: vehicleData?.cliente?.telefone ? formatPhone(vehicleData.cliente.telefone) : "",
     email: "",
     modelo: vehicleData?.modelo || "",
     marca: vehicleData?.marca || "",
@@ -36,6 +56,21 @@ export const ClientDataModal: React.FC<ClientDataModalProps> = ({
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (isOpen && vehicleData) {
+      setFormData({
+        nome: vehicleData.cliente?.nome || "",
+        telefone: vehicleData.cliente?.telefone ? formatPhone(vehicleData.cliente.telefone) : "",
+        email: "",
+        modelo: vehicleData.modelo || "",
+        marca: vehicleData.marca || "",
+        ano: vehicleData.ano || "",
+        cor: vehicleData.cor || ""
+      });
+      setErrors({});
+    }
+  }, [isOpen, vehicleData]);
 
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -59,7 +94,7 @@ export const ClientDataModal: React.FC<ClientDataModalProps> = ({
     }
 
     // Se não temos dados do veículo, validar campos do veículo
-    if (!vehicleData?.modelo) {
+    if (!vehicleData?.marca && !vehicleData?.modelo) {
       if (!formData.modelo.trim()) newErrors.modelo = "Modelo é obrigatório";
       if (!formData.marca.trim()) newErrors.marca = "Marca é obrigatória";
       if (!formData.ano.trim()) newErrors.ano = "Ano é obrigatório";
@@ -77,71 +112,31 @@ export const ClientDataModal: React.FC<ClientDataModalProps> = ({
     setIsSubmitting(true);
 
     try {
-      // 1. Verificar se o cliente já existe pelo telefone
-      const { data: existingClient } = await supabase
-        .from('clients')
-        .select('id')
-        .eq('company_id', currentCompanyId)
-        .eq('telefone', formData.telefone)
-        .maybeSingle();
+      // Extrair apenas os números do telefone e adicionar DDI 55, padrão do cURL de exemplo
+      const telefoneSoNumeros = "55" + formData.telefone.replace(/\D/g, '');
 
-      let clienteId: string;
+      const payload: any = {
+        nome: formData.nome,
+        telefone: telefoneSoNumeros,
+        email: formData.email || undefined,
+        status: true
+      };
 
-      if (existingClient) {
-        // Cliente já existe
-        clienteId = existingClient.id;
-        console.log('Cliente existente encontrado:', clienteId);
-      } else {
-        // Criar novo cliente
-        const { data: novoCliente, error: clienteError } = await supabase
-          .from('clients')
-          .insert({
-            company_id: currentCompanyId,
-            nome: formData.nome,
-            telefone: formData.telefone,
-            email: formData.email || null,
-            tipo: 'Pessoa Física',
-            status: 'Ativo'
-          })
-          .select()
-          .single();
-
-        if (clienteError) {
-          console.error('Erro ao criar cliente:', clienteError);
-          toast({
-            title: "Erro ao salvar cliente",
-            description: clienteError.message,
-            variant: "destructive"
-          });
-          setIsSubmitting(false);
-          return;
-        }
-
-        clienteId = novoCliente.id;
-        console.log('Novo cliente criado:', clienteId);
+      // Adicionar idcliente se for atualização
+      if (vehicleData?.cliente?.id) {
+        payload.idcliente = vehicleData.cliente.id;
       }
 
-      // 2. Vincular cliente ao veículo se temos idplaca
+      // Adicionar idveiculo se houver
       if (vehicleData?.idplaca) {
-        const { error: vinculoError } = await supabase
-          .from('clientes_veiculos')
-          .insert({
-            cliente_id: clienteId,
-            veiculo_idplaca: vehicleData.idplaca
-          });
-
-        // Ignorar erro de duplicate key (cliente já vinculado ao veículo)
-        if (vinculoError && vinculoError.code !== '23505') {
-          console.error('Erro ao vincular cliente-veículo:', vinculoError);
-          toast({
-            title: "Erro ao vincular veículo",
-            description: vinculoError.message,
-            variant: "destructive"
-          });
-        } else {
-          console.log('Cliente vinculado ao veículo:', vehicleData.idplaca);
-        }
+        payload.idveiculo = vehicleData.idplaca;
+        payload["idveiculo:"] = vehicleData.idplaca; // Para cobrir o typo do JSON de exemplo
       }
+
+      // Envia para o novo endpoint da API
+      const resultPayload = await saveClientApi(payload);
+      
+      const clienteId = resultPayload?.idcliente || vehicleData?.cliente?.id || 0;
 
       // 3. Retornar dados completos
       const completeData = {
@@ -166,11 +161,11 @@ export const ClientDataModal: React.FC<ClientDataModalProps> = ({
       });
 
       onComplete(completeData);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erro ao processar dados:', error);
       toast({
         title: "Erro ao processar dados",
-        description: "Ocorreu um erro inesperado. Tente novamente.",
+        description: error.message || "Ocorreu um erro inesperado. Tente novamente.",
         variant: "destructive"
       });
     } finally {
@@ -178,21 +173,7 @@ export const ClientDataModal: React.FC<ClientDataModalProps> = ({
     }
   };
 
-  const formatPhone = (value: string) => {
-    // Remove tudo que não é dígito
-    const digits = value.replace(/\D/g, '');
-    
-    // Aplica a máscara
-    if (digits.length <= 2) {
-      return `(${digits}`;
-    } else if (digits.length <= 6) {
-      return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
-    } else if (digits.length <= 10) {
-      return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
-    } else {
-      return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7, 11)}`;
-    }
-  };
+
 
   const handlePhoneChange = (value: string) => {
     const formatted = formatPhone(value);
@@ -285,7 +266,7 @@ export const ClientDataModal: React.FC<ClientDataModalProps> = ({
           </div>
 
           {/* Dados do Veículo - só mostrar se não temos dados da API */}
-          {!vehicleData?.modelo && (
+          {(!vehicleData?.marca && !vehicleData?.modelo) && (
             <div className="space-y-4">
               <h3 className="font-semibold text-foreground flex items-center gap-2">
                 <Car className="h-4 w-4" />
@@ -345,7 +326,7 @@ export const ClientDataModal: React.FC<ClientDataModalProps> = ({
           )}
 
           {/* Se temos dados do veículo da API, mostrar resumo */}
-          {vehicleData?.modelo && (
+          {(vehicleData?.marca || vehicleData?.modelo) && (
             <Card className="bg-muted/30">
               <CardContent className="p-4">
                 <h4 className="font-semibold text-sm mb-3 flex items-center gap-2">
@@ -353,18 +334,32 @@ export const ClientDataModal: React.FC<ClientDataModalProps> = ({
                   Dados do Veículo Encontrados
                 </h4>
                 <div className="grid grid-cols-2 gap-2 text-sm">
-                  <div className="flex items-center gap-2">
-                    <Car className="h-3 w-3 text-muted-foreground" />
-                    <span>{vehicleData.marca} {vehicleData.modelo}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Calendar className="h-3 w-3 text-muted-foreground" />
-                    <span>{vehicleData.ano}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Palette className="h-3 w-3 text-muted-foreground" />
-                    <span>{vehicleData.cor}</span>
-                  </div>
+                  {(vehicleData.marca || vehicleData.modelo) && (
+                    <div className="flex items-center gap-2">
+                      <Car className="h-3 w-3 text-muted-foreground" />
+                      <span className="font-medium text-wash-blue">
+                        {vehicleData.marca} {vehicleData.modelo}
+                      </span>
+                    </div>
+                  )}
+                  {vehicleData.ano && (
+                    <div className="flex items-center gap-2">
+                      <Calendar className="h-3 w-3 text-muted-foreground" />
+                      <span>{vehicleData.ano}{vehicleData.anoModelo ? ` / ${vehicleData.anoModelo}` : ''}</span>
+                    </div>
+                  )}
+                  {vehicleData.uf && (
+                    <div className="flex items-center gap-2">
+                      <Hash className="h-3 w-3 text-muted-foreground" />
+                      <span>{vehicleData.uf}</span>
+                    </div>
+                  )}
+                  {vehicleData.cor && (
+                    <div className="flex items-center gap-2">
+                      <Palette className="h-3 w-3 text-muted-foreground" />
+                      <span>{vehicleData.cor}</span>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>

@@ -39,6 +39,8 @@ export interface ClientSavePayload {
   telefone: string;
   status: boolean;
   idcliente?: number; // Only for update
+  idveiculo?: number;
+  "idveiculo:"?: number; // Caso a API realmente espere com os dois pontos devido ao typo
 }
 
 export interface ClientSaveResponse {
@@ -152,6 +154,8 @@ export async function saveClientApi(clientData: ClientSavePayload): Promise<void
     checkAuthError(data.msgerro);
     throw new Error(data.msgerro || 'Erro ao salvar cliente.');
   }
+
+  return data.payload;
 }
 
 /**
@@ -191,4 +195,65 @@ export async function deleteClientApi(clientId: number): Promise<void> {
     checkAuthError(data.msgerro);
     throw new Error(data.msgerro || 'Erro ao excluir cliente.');
   }
+}
+
+export interface ConsultarPlacaResponse {
+  retorno: number;
+  msgerro: string;
+  payload: {
+    idveiculo: number;
+    placa: string;
+    marca: string;
+    modelo?: string;
+    anofabricacao: number;
+    anomodelo: number;
+    uf: string;
+    cliente?: {
+      idcliente: number;
+      nome: string;
+      telefone: string;
+    };
+    status: string;
+  };
+}
+
+/**
+ * Consulta a placa utilizando o novo endpoint da API.
+ */
+export async function consultarPlacaApi(placa: string): Promise<ConsultarPlacaResponse> {
+  const { token, idsessao } = getAuthData();
+  const BASE_URL = import.meta.env.DEV ? '' : 'https://nexus.frconnect.com.br';
+  const url = `${BASE_URL}/carwash/v1/services/placa_consultar`;
+
+  const payload = {
+    idsessao,
+    module: "lavajatonatal",
+    request: {
+      parameters: {
+        placa
+      }
+    }
+  };
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.ok) {
+    throw new Error('Falha na comunicação com o servidor ao consultar placa.');
+  }
+
+  const data: ConsultarPlacaResponse = await response.json();
+
+  if (data.retorno !== 0) {
+    checkAuthError(data.msgerro);
+    throw new Error(data.msgerro || 'Erro ao consultar placa.');
+  }
+
+  return data;
 }

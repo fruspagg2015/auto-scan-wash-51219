@@ -1,331 +1,143 @@
-import React, { useRef, useState, useCallback, useEffect } from "react";
-import { Camera, RotateCcw, Check, ArrowLeft, Loader2, Upload } from "lucide-react";
+import React, { useState, useCallback, useRef, useEffect } from "react";
+import { ArrowLeft, Check, Loader2, Car } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { useNavigate } from "react-router-dom";
-import { ProcessingModal } from "@/components/ProcessingModal";
 import { ClientDataModal } from "@/components/ClientDataModal";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
+import { consultarPlacaApi } from "@/services/clientApi";
 
 const CameraCapture = () => {
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-
-  const [stream, setStream] = useState<MediaStream | null>(null);
-  const [isCameraActive, setIsCameraActive] = useState(false);
-  const [isCameraLoading, setIsCameraLoading] = useState(false);
-  const [isFrontCamera, setIsFrontCamera] = useState(false);
-  const [capturedImage, setCapturedImage] = useState<string | null>(null);
-  const [showProcessingModal, setShowProcessingModal] = useState(false);
-  const [showClientModal, setShowClientModal] = useState(false);
-  const [vehicleDataForClient, setVehicleDataForClient] = useState<any>(null);
   const [manualPlate, setManualPlate] = useState("");
   const [isSearchingPlate, setIsSearchingPlate] = useState(false);
+  const [showClientModal, setShowClientModal] = useState(false);
+  const [vehicleDataForClient, setVehicleDataForClient] = useState<any>(null);
+  const [suggestions, setSuggestions] = useState<string[]>([]);
   const navigate = useNavigate();
 
-  // Conecta o stream ao <video> APÓS o render — videoRef.current garantido
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
-    video.srcObject = stream;
-    if (stream) {
-      video.play().catch((err) =>
-        console.warn("video.play() aviso:", err?.name)
-      );
-    }
-  }, [stream]);
+  const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
-  // Cleanup ao desmontar (navegar para outra página)
-  useEffect(() => {
-    return () => {
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach((t) => t.stop());
-        streamRef.current = null;
-      }
-    };
-  }, []);
-
-  // onCanPlay: câmera pronta para exibir
-  const handleVideoCanPlay = useCallback(() => {
-    if (streamRef.current) {
-      setIsCameraActive(true);
-      setIsCameraLoading(false);
-    }
-  }, []);
-
-  // stopCamera usa ref — sem stale closure
-  const stopCamera = useCallback(() => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((t) => t.stop());
-      streamRef.current = null;
-    }
-    setStream(null);
-    setIsCameraActive(false);
-    setIsCameraLoading(false);
-  }, []);
-
-  const startCamera = useCallback(async () => {
-    // Para stream existente antes de abrir novo
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((t) => t.stop());
-      streamRef.current = null;
-      setStream(null);
-    }
-
-    if (!navigator.mediaDevices?.getUserMedia) {
-      toast({
-        title: "Câmera indisponível",
-        description:
-          "O navegador requer HTTPS para acessar a câmera. Use 'Carregar Imagem' como alternativa.",
-        variant: "destructive",
-      });
+  const handleInputChange = (index: number, value: string) => {
+    // Verifica se é colagem de vários caracteres ou autocompletar
+    if (value.length > 1) {
+      handlePasteData(value);
       return;
     }
 
-    setIsCameraLoading(true);
-    setIsCameraActive(false);
+    const upperValue = value.toUpperCase().replace(/[^A-Z0-9]/g, "");
+    
+    if (!upperValue && value !== "") return;
 
-    try {
-      let mediaStream: MediaStream;
-      let usedFront = false;
-
-      try {
-        mediaStream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: "environment" } },
-        });
-        const settings =
-          mediaStream.getVideoTracks()[0]?.getSettings?.() ?? {};
-        // Se pediu environment e conseguiu, assume traseira se for undefined.
-        usedFront = settings.facingMode === "user";
-      } catch {
-        mediaStream = await navigator.mediaDevices.getUserMedia({
-          video: true,
-        });
-        usedFront = true;
-      }
-
-      streamRef.current = mediaStream;
-      setIsFrontCamera(usedFront);
-      setStream(mediaStream); // → useEffect conecta ao <video>
-    } catch (error: any) {
-      console.error("Erro ao acessar câmera:", error);
-      streamRef.current = null;
-      setIsCameraLoading(false);
-      const denied =
-        error?.name === "NotAllowedError" ||
-        error?.name === "PermissionDeniedError";
-      toast({
-        title: denied ? "Permissão negada" : "Erro ao acessar a câmera",
-        description: denied
-          ? "Permita o acesso à câmera nas configurações do navegador."
-          : "Não foi possível ativar a câmera. Use 'Carregar Imagem'.",
-        variant: "destructive",
-      });
+    let newPlate = manualPlate.split("");
+    for (let i = 0; i < 7; i++) {
+      if (!newPlate[i]) newPlate[i] = "";
     }
-  }, []);
+    
+    newPlate[index] = upperValue;
+    const updatedPlate = newPlate.join("").substring(0, 7);
+    setManualPlate(updatedPlate);
 
-  // capturePhoto: escalona para 1280×720 máximo e trata todos os erros
-  const capturePhoto = useCallback(() => {
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
-    if (!video || !canvas) return;
-
-    const srcW = video.videoWidth;
-    const srcH = video.videoHeight;
-
-    if (!srcW || !srcH) {
-      toast({
-        title: "Câmera ainda carregando",
-        description: "Aguarde a câmera inicializar e tente novamente.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    try {
-      // Redimensiona mantendo a proporção. O maior lado será no máximo 1280px.
-      const MAX_DIM = 1280;
-      const scale = Math.min(1, MAX_DIM / srcW, MAX_DIM / srcH);
-      const w = Math.round(srcW * scale);
-      const h = Math.round(srcH * scale);
-
-      canvas.width = w;
-      canvas.height = h;
-
-      const ctx = canvas.getContext("2d");
-      if (!ctx) {
-        stopCamera();
-        return;
+    if (upperValue !== "") {
+      if (index < 6) {
+        setTimeout(() => inputRefs.current[index + 1]?.focus(), 10);
+      } else if (index === 6) {
+        setTimeout(() => document.getElementById("validar-btn")?.focus(), 10);
       }
-
-      // Desenhamos a imagem original da câmera, sem espelhar, 
-      // para garantir que o texto da placa NUNCA fique invertido (trás pra frente)
-      ctx.drawImage(video, 0, 0, srcW, srcH, 0, 0, w, h);
-
-      // O Plate Recognizer API não necessita de filtro de contraste manual
-      // Removemos o getImageData loop para evitar OOM e travamentos no mobile
-
-      const imageData = canvas.toDataURL("image/jpeg", 0.92);
-      if (!imageData || imageData === "data:,") {
-        throw new Error("Imagem capturada vazia");
-      }
-
-      setCapturedImage(imageData);
-      stopCamera();
-    } catch (err) {
-      console.error("Erro ao capturar foto:", err);
-      toast({
-        title: "Erro ao capturar",
-        description:
-          "Não foi possível capturar a imagem. Tente novamente ou use 'Carregar Imagem'.",
-        variant: "destructive",
-      });
     }
-  }, [stopCamera, isFrontCamera]);
+  };
 
-  const handleImageUpload = useCallback(
-    (event: React.ChangeEvent<HTMLInputElement>) => {
-      const file = event.target.files?.[0];
-      if (!file) return;
-      event.target.value = "";
+  const handlePasteData = (pastedData: string) => {
+    const cleaned = pastedData.toUpperCase().replace(/[^A-Z0-9]/g, "").substring(0, 7);
+    setManualPlate(cleaned);
+    if (cleaned.length === 7) {
+      setTimeout(() => document.getElementById("validar-btn")?.focus(), 10);
+    } else {
+      const nextIndex = Math.min(cleaned.length, 6);
+      setTimeout(() => inputRefs.current[nextIndex]?.focus(), 10);
+    }
+  };
 
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const rawUrl = e.target?.result as string;
-        const img = new Image();
-        img.onload = () => {
-          const canvas = document.createElement("canvas");
-          const MAX = 1280;
-          let { width: w, height: h } = img;
-          if (w > MAX || h > MAX) {
-            const r = Math.min(MAX / w, MAX / h);
-            w = Math.round(w * r);
-            h = Math.round(h * r);
-          }
-          canvas.width = w;
-          canvas.height = h;
-          const ctx = canvas.getContext("2d");
-          if (!ctx) {
-            setCapturedImage(rawUrl);
-            stopCamera();
-            return;
-          }
-          ctx.drawImage(img, 0, 0, w, h);
-          
-          // O Plate Recognizer API não necessita de filtro de contraste manual
-          
-          setCapturedImage(canvas.toDataURL("image/jpeg", 0.92));
-          stopCamera();
-        };
-        img.onerror = () => {
-          setCapturedImage(rawUrl);
-          stopCamera();
-        };
-        img.src = rawUrl;
-      };
-      reader.readAsDataURL(file);
-    },
-    [stopCamera]
-  );
+  const handlePaste = (e: React.ClipboardEvent) => {
+    e.preventDefault();
+    handlePasteData(e.clipboardData.getData("text"));
+  };
 
-  const retakePhoto = useCallback(() => {
-    setCapturedImage(null);
-    startCamera();
-  }, [startCamera]);
+  const handleKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Backspace") {
+      if (!manualPlate[index] && index > 0) {
+        let newPlate = manualPlate.split("");
+        newPlate[index - 1] = "";
+        setManualPlate(newPlate.join(""));
+        inputRefs.current[index - 1]?.focus();
+      }
+    }
+  };
 
-  const confirmPhoto = useCallback(() => {
-    if (capturedImage) setShowProcessingModal(true);
-  }, [capturedImage]);
+  const handleFocus = (index: number) => {
+    const firstEmptyIndex = manualPlate.length;
+    if (index > firstEmptyIndex && firstEmptyIndex < 7) {
+      inputRefs.current[firstEmptyIndex]?.focus();
+    }
+  };
 
   const handleManualSearch = useCallback(async () => {
-    if (manualPlate.length < 7) return;
+    if (manualPlate.length < 7) {
+      toast({
+        title: "Placa incompleta",
+        description: "A placa deve conter 7 caracteres.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     setIsSearchingPlate(true);
     try {
-      const { data: veiculoCache, error: cacheError } = await supabase
-        .from("veiculos")
-        .select("*")
-        .eq("placa", manualPlate)
-        .maybeSingle();
-
       const hora = new Date().toLocaleTimeString("pt-BR", {
         hour: "2-digit",
         minute: "2-digit",
       });
-      let vehicleData;
 
-      if (!cacheError && veiculoCache) {
-        vehicleData = {
-          placa: veiculoCache.placa,
-          marca: veiculoCache.marca || "",
-          modelo: veiculoCache.modelo || "",
-          submodelo: veiculoCache.submodelo || "",
-          versao: veiculoCache.versao || "",
-          ano: veiculoCache.ano || "",
-          anoModelo: veiculoCache.anomodelo || "",
-          cor: veiculoCache.cor || "",
-          municipio: veiculoCache.municipio || "",
-          uf: veiculoCache.uf || "",
-          imagem: null,
-          hora_chegada: hora,
-          fonte: "cache",
-          idplaca: veiculoCache.idplaca,
-        };
-      } else {
-        const { data: novoVeiculo, error: insertError } = await supabase
-          .from("veiculos")
-          .insert({ placa: manualPlate })
-          .select()
-          .single();
-        if (insertError)
-          console.error("Erro ao salvar veículo manual:", insertError);
-        vehicleData = {
-          placa: manualPlate,
-          marca: "",
-          modelo: "",
-          submodelo: "",
-          versao: "",
-          ano: "",
-          anoModelo: "",
-          cor: "",
-          municipio: "",
-          uf: "",
-          imagem: null,
-          hora_chegada: hora,
-          fonte: "manual",
-          idplaca: novoVeiculo?.idplaca,
-        };
-      }
+      const response = await consultarPlacaApi(manualPlate);
+      const placaData = response.payload;
+
+      const vehicleData = {
+        placa: placaData.placa || manualPlate,
+        marca: placaData.marca || "",
+        modelo: placaData.modelo || "", 
+        submodelo: "",
+        versao: "",
+        ano: placaData.anofabricacao ? String(placaData.anofabricacao) : "",
+        anoModelo: placaData.anomodelo ? String(placaData.anomodelo) : "",
+        cor: "",
+        municipio: "",
+        uf: placaData.uf || "",
+        imagem: null,
+        hora_chegada: hora,
+        cliente: placaData.cliente ? {
+          id: placaData.cliente.idcliente,
+          nome: placaData.cliente.nome,
+          telefone: placaData.cliente.telefone,
+          cadastrado: true
+        } : null,
+        fonte: "api",
+        idplaca: placaData.idveiculo,
+        status: placaData.status,
+      };
 
       setVehicleDataForClient(vehicleData);
       setShowClientModal(true);
-    } catch (error) {
-      console.error("Erro ao buscar placa:", error);
+    } catch (error: any) {
+      console.error("Erro ao consultar placa via API:", error);
+      toast({
+        title: "Erro na consulta",
+        description: error.message || "Não foi possível validar a placa.",
+        variant: "destructive",
+      });
     } finally {
       setIsSearchingPlate(false);
     }
   }, [manualPlate]);
-
-  const handleProcessingComplete = useCallback(
-    (result: any) => {
-      setShowProcessingModal(false);
-      navigate("/vehicle-details", { state: result });
-    },
-    [navigate]
-  );
-
-  const handleProcessingCancel = useCallback(
-    () => setShowProcessingModal(false),
-    []
-  );
-
-  const handleRequestClientData = useCallback((vehicleData: any) => {
-    setShowProcessingModal(false);
-    setVehicleDataForClient(vehicleData);
-    setShowClientModal(true);
-  }, []);
 
   const handleClientDataComplete = useCallback(
     (result: any) => {
@@ -341,220 +153,138 @@ const CameraCapture = () => {
     setVehicleDataForClient(null);
   }, []);
 
+  useEffect(() => {
+    inputRefs.current = inputRefs.current.slice(0, 7);
+  }, []);
+
+  useEffect(() => {
+    const fetchSuggestions = async () => {
+      // Buscar apenas se tiver pelo menos 2 caracteres e menos que 7
+      if (manualPlate.length >= 2 && manualPlate.length < 7) {
+        const { data } = await supabase
+          .from("veiculos")
+          .select("placa")
+          .ilike("placa", `${manualPlate}%`)
+          .limit(4);
+          
+        if (data && data.length > 0) {
+          setSuggestions(data.map((d) => d.placa));
+        } else {
+          setSuggestions([]);
+        }
+      } else {
+        setSuggestions([]);
+      }
+    };
+
+    const timer = setTimeout(fetchSuggestions, 300);
+    return () => clearTimeout(timer);
+  }, [manualPlate]);
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-wash-blue-light to-background p-3 flex flex-col justify-between">
-      <div className="max-w-md mx-auto w-full flex-1 flex flex-col justify-between">
-        <div>
-          {/* Header */}
-          <div className="flex items-center gap-4 mb-3">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => navigate("/")}
-              className="rounded-full h-8 w-8"
-            >
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-            <h1 className="text-xl font-bold text-wash-blue">📷 Capturar Placa</h1>
-          </div>
+    <div className="min-h-[80vh] bg-gradient-to-br from-wash-blue-light to-background p-4 flex flex-col items-center justify-center">
+      <div className="w-full max-w-md">
+        <div className="flex items-center gap-4 mb-8">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => navigate("/")}
+            className="rounded-full h-10 w-10 bg-white shadow-sm hover:bg-gray-100 transition-all"
+          >
+            <ArrowLeft className="h-5 w-5 text-wash-blue" />
+          </Button>
+          <h1 className="text-2xl font-bold text-wash-blue tracking-tight">Nova Chegada</h1>
+        </div>
 
-          {/* Área da câmera / imagem */}
-          <Card className="mb-3 overflow-hidden shadow-soft">
-            <div className="relative aspect-[4/3] bg-gray-900">
-              {!capturedImage ? (
-                <>
-                  {/* <video> sempre no DOM para o useEffect poder atribuir srcObject */}
-                  <video
-                    ref={videoRef}
-                    autoPlay
-                    playsInline
-                    muted
-                    onCanPlay={handleVideoCanPlay}
-                    className={`w-full h-full object-cover ${
-                      isFrontCamera ? "scale-x-[-1]" : ""
-                    }`}
-                  />
-                  <canvas ref={canvasRef} className="hidden" />
-
-                  {/* Overlay de enquadramento */}
-                  {isCameraActive && (
-                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                      <div className="border-2 border-white/80 rounded-lg w-3/4 h-1/3 flex items-center justify-center">
-                        <span className="text-white/80 text-xs font-medium bg-black/30 px-2 py-0.5 rounded">
-                          Posicione a placa aqui
-                        </span>
-                      </div>
-                    </div>
-                  )}
-
-                  {isCameraActive && isFrontCamera && (
-                    <div className="absolute top-2 right-2 bg-black/50 text-white text-[10px] px-2 py-0.5 rounded">
-                      📷 Câmera frontal
-                    </div>
-                  )}
-
-                  {/* Spinner de carregamento */}
-                  {isCameraLoading && (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60">
-                      <Loader2 className="h-10 w-10 text-white animate-spin mb-2" />
-                      <span className="text-white text-sm font-medium">
-                        Iniciando câmera...
-                      </span>
-                    </div>
-                  )}
-
-                  {/* Placeholder quando câmera inativa */}
-                  {!isCameraActive && !isCameraLoading && (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-400">
-                      <Camera className="h-12 w-12 mb-2 opacity-30" />
-                      <span className="text-xs opacity-50">Câmera desligada</span>
-                    </div>
-                  )}
-                </>
-              ) : (
-                <img
-                  src={capturedImage}
-                  alt="Foto capturada"
-                  className="w-full h-full object-cover"
-                />
-              )}
+        <Card className="p-6 sm:p-8 shadow-xl border-none rounded-3xl bg-white/90 backdrop-blur-sm">
+          <div className="flex flex-col items-center text-center space-y-6">
+            <div className="h-16 w-16 bg-wash-blue/10 rounded-full flex items-center justify-center text-wash-blue mb-2">
+              <Car className="h-8 w-8" />
             </div>
-          </Card>
+            
+            <div>
+              <h2 className="text-xl font-bold text-gray-800 mb-2">Informe a Placa</h2>
+              <p className="text-sm text-gray-500">
+                Digite a placa do veículo para iniciar o atendimento.
+              </p>
+            </div>
 
-          {/* Botões de ação */}
-          <div className="space-y-2">
-            {!capturedImage ? (
-              <div className="flex flex-col gap-2">
-                <Button
-                  onClick={isCameraActive ? capturePhoto : startCamera}
-                  disabled={isCameraLoading}
-                  variant="camera"
-                  size="lg"
-                  className={`w-full h-11 text-sm transition-all duration-200 ${
-                    isCameraActive
-                      ? "bg-wash-blue text-white hover:bg-wash-blue/90 shadow-lg"
-                      : ""
-                  }`}
-                >
-                  {isCameraLoading ? (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  ) : (
-                    <Camera className="h-4 w-4 mr-2" />
-                  )}
-                  {isCameraLoading
-                    ? "Iniciando câmera..."
-                    : isCameraActive
-                    ? "📸 Capturar Foto"
-                    : "Iniciar Câmera"}
-                </Button>
-
+            <div 
+              className="flex gap-1.5 sm:gap-2 justify-center w-full my-6"
+              onPaste={handlePaste}
+            >
+              {Array.from({ length: 7 }).map((_, i) => (
                 <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handleImageUpload}
-                  className="hidden"
-                  id="file-upload"
+                  key={i}
+                  ref={(el) => (inputRefs.current[i] = el)}
+                  type="text"
+                  maxLength={1}
+                  value={manualPlate[i] || ""}
+                  onChange={(e) => handleInputChange(i, e.target.value)}
+                  onKeyDown={(e) => handleKeyDown(i, e)}
+                  onFocus={() => handleFocus(i)}
+                  className={`w-10 sm:w-12 h-14 sm:h-16 text-center text-2xl sm:text-3xl font-bold font-mono uppercase rounded-xl border-2 transition-all outline-none
+                    ${
+                      manualPlate[i]
+                        ? "border-wash-blue bg-wash-blue/5 text-wash-blue"
+                        : "border-gray-200 bg-gray-50 text-gray-400 focus:border-wash-blue/50 focus:bg-white"
+                    }
+                  `}
                 />
+              ))}
+            </div>
 
-                <Button
-                  variant="outline"
-                  size="lg"
-                  onClick={() =>
-                    document.getElementById("file-upload")?.click()
-                  }
-                  className="w-full h-11 text-sm border-wash-blue text-wash-blue hover:bg-wash-blue/10 bg-white"
-                >
-                  <Upload className="h-4 w-4 mr-2" />
-                  Carregar Imagem
-                </Button>
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 gap-3">
-                <Button
-                  onClick={retakePhoto}
-                  variant="outline"
-                  size="lg"
-                  className="w-full h-11 text-sm"
-                >
-                  <RotateCcw className="h-4 w-4 mr-2" />
-                  Recapturar
-                </Button>
-                <Button
-                  onClick={confirmPhoto}
-                  variant="confirm"
-                  size="lg"
-                  className="w-full h-11 text-sm"
-                >
-                  <Check className="h-4 w-4 mr-2" />
-                  Confirmar
-                </Button>
+            {/* Sugestões de Autocompletar */}
+            {suggestions.length > 0 && (
+              <div className="w-full mb-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                <p className="text-xs text-gray-400 mb-2 font-medium">Placas sugeridas:</p>
+                <div className="flex flex-wrap gap-2 justify-center">
+                  {suggestions.map((placa) => (
+                    <Button
+                      key={placa}
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setManualPlate(placa);
+                        setSuggestions([]);
+                      }}
+                      className="font-mono border-wash-blue/20 text-wash-blue hover:bg-wash-blue hover:text-white transition-all h-8"
+                    >
+                      {placa}
+                    </Button>
+                  ))}
+                </div>
               </div>
             )}
+
+            <Button
+              id="validar-btn"
+              onClick={handleManualSearch}
+              disabled={manualPlate.length < 7 || isSearchingPlate}
+              className="w-full h-14 text-lg font-bold rounded-2xl bg-wash-blue hover:bg-wash-blue/90 text-white shadow-lg shadow-wash-blue/20 transition-all active:scale-[0.98] focus-visible:ring-4 focus-visible:ring-wash-blue/50"
+            >
+              {isSearchingPlate ? (
+                <>
+                  <Loader2 className="h-6 w-6 mr-2 animate-spin" />
+                  Processando...
+                </>
+              ) : (
+                <>
+                  <Check className="h-6 w-6 mr-2" />
+                  Validar Placa
+                </>
+              )}
+            </Button>
           </div>
-        </div>
-
-        <div>
-          {/* Entrada manual */}
-          <Card className="mt-3 p-3 shadow-soft border-wash-blue/10 bg-white">
-            <div className="space-y-2">
-              <h3 className="text-xs font-semibold text-wash-blue">
-                Sem câmera? Digite a placa manualmente
-              </h3>
-              <div className="flex gap-2">
-                <Input
-                  placeholder="ABC1D23"
-                  value={manualPlate}
-                  onChange={(e) =>
-                    setManualPlate(
-                      e.target.value
-                        .replace(/[^a-zA-Z0-9]/g, "")
-                        .substring(0, 7)
-                        .toUpperCase()
-                    )
-                  }
-                  className="font-mono text-center text-base tracking-widest uppercase flex-1 h-9 border-wash-blue/20 focus-visible:ring-wash-blue"
-                  maxLength={7}
-                />
-                <Button
-                  onClick={handleManualSearch}
-                  disabled={manualPlate.length < 7 || isSearchingPlate}
-                  className="bg-wash-blue hover:bg-wash-blue/90 h-9 px-4 text-xs font-medium text-white"
-                >
-                  {isSearchingPlate ? (
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                  ) : (
-                    "Buscar"
-                  )}
-                </Button>
-              </div>
-            </div>
-          </Card>
-
-          <Card className="mt-3 p-2.5 bg-wash-blue-light/30 border-wash-blue/20">
-            <div className="text-center text-xs text-wash-blue">
-              <h3 className="font-semibold mb-1">💡 Dicas para melhor captura:</h3>
-              <ul className="space-y-0.5 text-left inline-block">
-                <li>• Posicione a placa dentro do quadro</li>
-                <li>• Certifique-se de ter boa iluminação e foco</li>
-              </ul>
-            </div>
-          </Card>
-        </div>
-
-        <ProcessingModal
-          isOpen={showProcessingModal}
-          onComplete={handleProcessingComplete}
-          onCancel={handleProcessingCancel}
-          capturedImage={capturedImage || ""}
-          onRequestClientData={handleRequestClientData}
-        />
-        <ClientDataModal
-          isOpen={showClientModal}
-          onComplete={handleClientDataComplete}
-          onCancel={handleClientDataCancel}
-          vehicleData={vehicleDataForClient}
-        />
+        </Card>
       </div>
+
+      <ClientDataModal
+        isOpen={showClientModal}
+        onComplete={handleClientDataComplete}
+        onCancel={handleClientDataCancel}
+        vehicleData={vehicleDataForClient}
+      />
     </div>
   );
 };

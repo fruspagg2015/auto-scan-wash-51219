@@ -168,22 +168,7 @@ const VehicleDetails = () => {
           </h1>
         </div>
 
-        {/* Vehicle Image */}
-        <Card className="mb-6 overflow-hidden shadow-soft">
-          <div className="relative aspect-[4/3]">
-            <img
-              src={vehicleData.imagem}
-              alt="Foto do veículo"
-              className="w-full h-full object-cover"
-            />
-            <div className="absolute top-4 right-4">
-              <Badge variant="secondary" className="bg-white/90 text-wash-blue">
-                <Image className="h-3 w-3 mr-1" />
-                Capturado
-              </Badge>
-            </div>
-          </div>
-        </Card>
+
 
         {/* Vehicle Information */}
         <Card className="mb-6 shadow-soft">
@@ -216,25 +201,7 @@ const VehicleDetails = () => {
               </span>
             </div>
 
-            {/* Ano e Cor */}
-            <div className="grid grid-cols-2 gap-3">
-              {vehicleData.ano && (
-                <div className="flex items-center justify-between p-3 bg-wash-blue-light/30 rounded-lg">
-                  <div className="flex items-center gap-2">
-                    <Calendar className="h-4 w-4 text-wash-blue" />
-                    <span className="font-medium text-foreground text-sm">Ano</span>
-                  </div>
-                  <span className="text-foreground font-medium text-sm">{vehicleData.ano}</span>
-                </div>
-              )}
-              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                <div className="flex items-center gap-2">
-                  <Palette className="h-4 w-4 text-wash-blue" />
-                  <span className="font-medium text-foreground text-sm">Cor</span>
-                </div>
-                <span className="text-foreground font-medium text-sm">{vehicleData.cor}</span>
-              </div>
-            </div>
+
 
             {/* Hora de Chegada */}
             <div className="flex items-center justify-between p-3 bg-wash-blue-light/30 rounded-lg">
@@ -247,22 +214,7 @@ const VehicleDetails = () => {
               </Badge>
             </div>
 
-            {/* Fonte dos dados */}
-            {vehicleData.fonte && (
-              <div className="flex items-center justify-center p-2">
-                <Badge
-                  variant="secondary"
-                  className={`text-xs ${vehicleData.fonte === 'cadastro_local' ? 'bg-wash-green-light text-wash-green' :
-                    vehicleData.fonte === 'api_externa' ? 'bg-wash-blue-light text-wash-blue' :
-                      'bg-muted text-muted-foreground'
-                    }`}
-                >
-                  {vehicleData.fonte === 'cadastro_local' ? '📋 Cadastro Local' :
-                    vehicleData.fonte === 'api_externa' ? '🌐 API Externa' :
-                      '✏️ Manual'}
-                </Badge>
-              </div>
-            )}
+
           </CardContent>
         </Card>
 
