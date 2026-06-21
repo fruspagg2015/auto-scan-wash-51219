@@ -1,5 +1,5 @@
 import { ReactNode } from "react"
-import { useLocation } from "react-router-dom"
+
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
 import { AppSidebar } from "./AppSidebar"
 import { useAuth } from "@/contexts/AuthContext"
@@ -12,42 +12,7 @@ interface LayoutProps {
 }
 
 export function Layout({ children }: LayoutProps) {
-  const location = useLocation()
   const { user, logout } = useAuth()
-  
-  const getPageTitle = (pathname: string) => {
-    switch (pathname) {
-      case '/dashboard':
-        return 'Dashboard'
-      case '/camera':
-        return 'Novo Atendimento'
-      case '/clientes':
-        return 'Clientes'
-      case '/servicos':
-        return 'Serviços'
-      case '/precos':
-        return 'Preços'
-      case '/relatorios':
-        return 'Relatórios'
-      case '/concluir-veiculo':
-        return 'Concluir Veículo'
-      case '/entregar-veiculo':
-        return 'Entregar Veículo'
-      case '/vehicle-details':
-        return 'Detalhes do Veículo'
-      case '/configuracoes-empresa':
-        return 'Configurações da Empresa'
-      case '/usuarios':
-        return 'Gerenciar Usuários'
-      case '/atendimento':
-        return 'Atendimento'
-      case '/':
-        return 'Atendimento'
-      default:
-        return 'CarWash Pro'
-    }
-  }
-
   return (
     <SidebarProvider>
       <div className="min-h-screen flex w-full">
@@ -61,7 +26,6 @@ export function Layout({ children }: LayoutProps) {
           <header className="h-14 flex items-center justify-between border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-4">
             <div className="flex items-center gap-4">
               <SidebarTrigger />
-              <h1 className="text-lg font-semibold text-foreground">{getPageTitle(location.pathname)}</h1>
             </div>
             
             <div className="flex items-center gap-4">

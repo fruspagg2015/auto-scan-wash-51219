@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { ArrowLeft, Car, Clock, Palette, Hash, Image, User, Phone, Mail, Calendar, CheckCircle2, CalendarCheck, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -13,9 +13,9 @@ import { format, addMinutes } from "date-fns";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 
 import { cn } from "@/lib/utils";
-import { registerFullService } from "@/services/registrationService";
-import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
+import { listServicesApi, BackendService, addServiceToClientApi } from "@/services/clientApi";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface VehicleData {
   placa: string;
@@ -36,12 +36,6 @@ interface VehicleData {
   tipo_atendimento?: 'agendado' | 'fila';
 }
 
-interface Servico {
-  id: string;
-  nome: string;
-  preco: number;
-  descricao: string;
-}
 
 const VehicleDetails = () => {
   const { currentCompanyId } = useAuth();
@@ -49,26 +43,34 @@ const VehicleDetails = () => {
   const navigate = useNavigate();
   const vehicleData = location.state as VehicleData;
 
-  const [servicosSelecionados, setServicosSelecionados] = useState<string[]>([]);
+  const [servicosSelecionados, setServicosSelecionados] = useState<number[]>([]);
+  const [servicosDisponiveis, setServicosDisponiveis] = useState<BackendService[]>([]);
+  const [isLoadingServicos, setIsLoadingServicos] = useState(true);
   const [tipoAtendimento, setTipoAtendimento] = useState<'agendado' | 'fila' | ''>('');
   const [dataAgendamento, setDataAgendamento] = useState<Date>();
   const [horaAgendamento, setHoraAgendamento] = useState<string>('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const servicosDisponiveis: Servico[] = [
-    { id: '1', nome: 'Lavagem Simples', preco: 15, descricao: 'Lavagem externa com sabão neutro' },
-    { id: '2', nome: 'Lavagem Completa', preco: 25, descricao: 'Lavagem externa + interna + pneus' },
-    { id: '3', nome: 'Enceramento', preco: 35, descricao: 'Aplicação de cera protetora' },
-    { id: '4', nome: 'Aspiração', preco: 10, descricao: 'Limpeza interna com aspirador' },
-    { id: '5', nome: 'Lavagem de Motor', preco: 20, descricao: 'Limpeza do compartimento do motor' },
-    { id: '6', nome: 'Detalhamento', preco: 80, descricao: 'Serviço completo de detalhamento' }
-  ];
+  useEffect(() => {
+    const fetchServicos = async () => {
+      try {
+        const dados = await listServicesApi();
+        setServicosDisponiveis(dados);
+      } catch (error: any) {
+        toast.error(error.message || "Erro ao carregar serviços");
+      } finally {
+        setIsLoadingServicos(false);
+      }
+    };
+    fetchServicos();
+  }, []);
 
   if (!vehicleData) {
     navigate("/");
     return null;
   }
 
-  const handleServicoToggle = (servicoId: string) => {
+  const handleServicoToggle = (servicoId: number) => {
     setServicosSelecionados(prev =>
       prev.includes(servicoId)
         ? prev.filter(id => id !== servicoId)
@@ -78,75 +80,53 @@ const VehicleDetails = () => {
 
   const calcularTotal = () => {
     return servicosDisponiveis
-      .filter(servico => servicosSelecionados.includes(servico.id))
-      .reduce((total, servico) => total + servico.preco, 0);
+      .filter(servico => servicosSelecionados.includes(servico.idservico))
+      .reduce((total, servico) => total + servico.valor, 0);
   };
 
   const calcularTempoEstimado = () => {
-    const temposPorServico = {
-      '1': 15, // Lavagem Simples
-      '2': 30, // Lavagem Completa
-      '3': 45, // Enceramento
-      '4': 10, // Aspiração
-      '5': 25, // Lavagem de Motor
-      '6': 90  // Detalhamento
-    };
-
-    return servicosSelecionados.reduce((total, servicoId) => {
-      return total + (temposPorServico[servicoId as keyof typeof temposPorServico] || 0);
-    }, 0);
+    return servicosDisponiveis
+      .filter(servico => servicosSelecionados.includes(servico.idservico))
+      .reduce((total, servico) => total + (servico.tempoestimado || 0), 0);
   };
 
   const confirmarServicos = async () => {
     if (servicosSelecionados.length === 0) return;
     if (!tipoAtendimento) return;
 
-    const servicosSelecionadosDetalhes = servicosDisponiveis.filter(s =>
-      servicosSelecionados.includes(s.id)
-    );
-
-    const servicosNomes = servicosSelecionadosDetalhes.map(s => s.nome);
-    const tempoEstimadoStr = `${calcularTempoEstimado()} min`;
-
-    // Prepare Client Data
-    // We assume if vehicleData.cliente exists, use it. Else we might need defaults or better error handling.
-    // However, the VehicleDetails interface implies cliente is optional? 
-    // If it's missing, we can't register a client properly without inputs.
-    // We should probably show an error or require client data if we strictly need to register it.
-    // For now, let's assume if it is displayed, it exists.
-
-    const clientData = {
-      nome: vehicleData.cliente?.nome || 'Cliente Anônimo', // Fallback
-      telefone: vehicleData.cliente?.telefone || '0000000000',
-      email: vehicleData.cliente?.email,
-      company_id: currentCompanyId! // Assert non-null or handle error
-    };
-
-    if (!currentCompanyId) {
-      toast.error("Empresa não identificada. Não é possível salvar.");
+    if (!vehicleData.cliente?.id) {
+      toast.error("Erro: Cliente não identificado. Volte e registre o cliente.");
+      return;
+    }
+    
+    if (!vehicleData.idplaca) {
+      toast.error("Erro: Veículo não identificado no banco de dados.");
       return;
     }
 
+    setIsSubmitting(true);
+
     try {
-      await registerFullService(
-        clientData,
-        {
-          placa: vehicleData.placa,
-          modelo: vehicleData.modelo,
-          marca: vehicleData.marca,
-          cor: vehicleData.cor,
-          ano: vehicleData.ano
-        },
-        servicosNomes,
-        tempoEstimadoStr
+      const promessas = servicosSelecionados.map(idservico => 
+        addServiceToClientApi({
+          idcliente: vehicleData.cliente!.id!,
+          idservico: idservico,
+          idveiculo: vehicleData.idplaca!,
+          quantidade: 1,
+          observacao: ""
+        })
       );
 
-      toast.success("Serviço confirmado e registrado com sucesso!");
+      await Promise.all(promessas);
+
+      toast.success("Serviço(s) confirmado(s) e registrado(s) com sucesso!");
       navigate('/dashboard');
 
     } catch (error: any) {
       console.error("Erro ao registrar serviço:", error);
-      toast.error(`Erro ao registrar: ${error.message}`);
+      toast.error(error.message || "Erro ao registrar o serviço");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -288,24 +268,28 @@ const VehicleDetails = () => {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {servicosDisponiveis.map((servico) => (
-              <div key={servico.id} className="flex items-start space-x-3 p-3 rounded-lg border hover:bg-gray-50 transition-colors">
+            {isLoadingServicos ? (
+              <div className="flex justify-center p-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-wash-blue"></div>
+              </div>
+            ) : servicosDisponiveis.map((servico) => (
+              <div key={servico.idservico} className="flex items-start space-x-3 p-3 rounded-lg border hover:bg-gray-50 transition-colors">
                 <Checkbox
-                  id={servico.id}
-                  checked={servicosSelecionados.includes(servico.id)}
-                  onCheckedChange={() => handleServicoToggle(servico.id)}
+                  id={`servico-${servico.idservico}`}
+                  checked={servicosSelecionados.includes(servico.idservico)}
+                  onCheckedChange={() => handleServicoToggle(servico.idservico)}
                   className="mt-1"
                 />
                 <div className="flex-1">
                   <div className="flex items-center justify-between">
                     <label
-                      htmlFor={servico.id}
+                      htmlFor={`servico-${servico.idservico}`}
                       className="text-sm font-medium text-foreground cursor-pointer"
                     >
                       {servico.nome}
                     </label>
                     <Badge variant="secondary" className="text-wash-blue">
-                      R$ {servico.preco.toFixed(2)}
+                      R$ {servico.valor.toFixed(2)}
                     </Badge>
                   </div>
                   <p className="text-xs text-muted-foreground mt-1">
@@ -456,6 +440,7 @@ const VehicleDetails = () => {
         <div className="space-y-3">
           <Button
             disabled={
+              isSubmitting ||
               servicosSelecionados.length === 0 ||
               !tipoAtendimento ||
               (tipoAtendimento === 'agendado' && (!dataAgendamento || !horaAgendamento))
@@ -465,7 +450,7 @@ const VehicleDetails = () => {
             className="w-full"
             onClick={confirmarServicos}
           >
-            ✅ Confirmar Serviços ({servicosSelecionados.length})
+            {isSubmitting ? "Registrando..." : `✅ Confirmar Serviço(s) (${servicosSelecionados.length})`}
           </Button>
 
           <Button

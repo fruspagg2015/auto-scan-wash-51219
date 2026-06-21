@@ -15,7 +15,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { supabase } from "@/integrations/supabase/client";
+import { listVehiclesInServiceApi } from "@/services/clientApi";
 import {
   Table,
   TableBody,
@@ -130,83 +130,30 @@ const Dashboard = () => {
 
     const fetchServiceOrders = async () => {
       try {
-        // @ts-ignore
-        const { data, error } = await supabase
-          .from('service_orders')
-          .select(`
-            id,
-            vehicle_id,
-            service_type,
-            status,
-            arrival_time,
-            estimated_time,
-            veiculos (
-              placa,
-              modelo,
-              cor
-            )
-          `);
-
-        if (error) {
-          console.error('Error fetching service orders:', error);
-          // Fallback to local storage if DB fails (or just log it)
-          const agendamentosSalvos = JSON.parse(localStorage.getItem('agendamentos') || '[]');
-          loadFromLocalStorage(agendamentosSalvos);
-          return;
-        }
-
+        const data = await listVehiclesInServiceApi();
+        
         if (data) {
-          const formattedVehicles: VehicleInService[] = data.map((order: any) => ({
-            id: order.id,
-            placa: order.veiculos?.placa || 'N/A',
-            modelo: order.veiculos?.modelo || 'N/A',
-            cor: order.veiculos?.cor || 'N/A',
-            servico: order.service_type,
+          const formattedVehicles: VehicleInService[] = data.map((order) => ({
+            id: order.idlavagem,
+            placa: order.veiculo?.placa || 'N/A',
+            modelo: `${order.veiculo?.marca || ''} ${order.veiculo?.modelo || ''}`.trim() || 'N/A',
+            cor: order.veiculo?.cor || '-',
+            servico: order.servicos?.map((s: any) => s.nome).join(', ') || 'N/A',
             status: mapStatus(order.status),
-            horaChegada: new Date(order.arrival_time).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-            tempoEstimado: order.estimated_time || '-',
-            // Default to 'fila' as we don't have this in DB yet, or infer
+            horaChegada: new Date(order.entrada).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+            tempoEstimado: order.minutos ? `${order.minutos} min` : '-',
             tipoAtendimento: 'fila'
           }));
           setVehiclesInService(formattedVehicles);
         }
       } catch (err) {
-        console.error('Unexpected error:', err);
+        console.error('Unexpected error loading service orders:', err);
       }
     };
 
     fetchServiceOrders();
 
-    // Carregar agendamentos do localStorage (Legacy support / Optimistic updates)
-    const loadFromLocalStorage = (agendamentosSalvos: any[]) => {
-      if (agendamentosSalvos.length > 0) {
-        const veiculosDoStorage = agendamentosSalvos.map((agendamento: any) => ({
-          id: agendamento.id,
-          placa: agendamento.placa,
-          modelo: `${agendamento.marca || ''} ${agendamento.modelo}`.trim(),
-          cor: agendamento.cor,
-          servico: agendamento.servicosNomes,
-          status: agendamento.status,
-          horaChegada: agendamento.tipoAtendimento === 'agendado'
-            ? new Date(agendamento.dataAgendamento).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
-            : agendamento.horaChegada,
-          tempoEstimado: `${agendamento.tempoEstimado} min`,
-          tipoAtendimento: agendamento.tipoAtendimento,
-          dataAgendamento: agendamento.dataAgendamento
-        }));
 
-        setVehiclesInService(prev => {
-          // Merge strategy could be improved, for now just append if not exists? 
-          // Or just replace? The prompt asked for DB data.
-          // Let's prioritizing DB data but keeping this function for fallback.
-          // Actually, if we have DB data, we might duplicate. 
-          // But since I cleared initial state, let's strictly use DB if available.
-          // If DB is empty, maybe use local.
-          if (prev.length === 0) return veiculosDoStorage;
-          return prev;
-        });
-      }
-    };
 
   }, [location.state]);
 
@@ -215,7 +162,8 @@ const Dashboard = () => {
       'pending': 'Aguardando',
       'in_progress': 'Em andamento',
       'completed': 'Finalizado',
-      'delivered': 'Entregue'
+      'delivered': 'Entregue',
+      'ABERTA': 'Em andamento'
     };
     return map[dbStatus] || dbStatus;
   };

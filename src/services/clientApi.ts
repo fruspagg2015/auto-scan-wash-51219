@@ -257,3 +257,179 @@ export async function consultarPlacaApi(placa: string): Promise<ConsultarPlacaRe
 
   return data;
 }
+
+export interface BackendServiceItem {
+  idservicoitem: number;
+  descricao: string;
+  incluso: boolean;
+  ordem: number;
+}
+
+export interface BackendService {
+  idservico: number;
+  nome: string;
+  descricao: string;
+  categoria: string;
+  valor: number;
+  tempoestimado: number;
+  ativo: boolean;
+  itens: BackendServiceItem[];
+}
+
+export interface ServiceListResponse {
+  retorno: number;
+  msgerro: string;
+  payload: {
+    paginacao: any;
+    dados: BackendService[];
+  };
+}
+
+/**
+ * Lista os serviços utilizando o novo endpoint da API.
+ */
+export async function listServicesApi(): Promise<BackendService[]> {
+  const { token, idsessao } = getAuthData();
+  const BASE_URL = import.meta.env.DEV ? '' : 'https://nexus.frconnect.com.br';
+  const url = `${BASE_URL}/carwash/v1/services/servico_listar`;
+
+  const payload = {
+    idsessao,
+    module: "lavajatonatal",
+    request: {
+      parameters: {}
+    }
+  };
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.ok) {
+    throw new Error('Falha na comunicação com o servidor ao listar serviços.');
+  }
+
+  const data: ServiceListResponse = await response.json();
+
+  if (data.retorno !== 0) {
+    checkAuthError(data.msgerro);
+    throw new Error(data.msgerro || 'Erro ao listar serviços.');
+  }
+
+  return data.payload?.dados || [];
+}
+
+export interface AddServicePayload {
+  idcliente: number;
+  idservico: number;
+  idveiculo: number;
+  quantidade: number;
+  observacao?: string;
+}
+
+/**
+ * Vincula um serviço ao cliente e veículo utilizando o novo endpoint da API.
+ */
+export async function addServiceToClientApi(payloadData: AddServicePayload): Promise<void> {
+  const { token, idsessao } = getAuthData();
+  const BASE_URL = import.meta.env.DEV ? '' : 'https://nexus.frconnect.com.br';
+  const url = `${BASE_URL}/carwash/v1/services/cliente_servico`;
+
+  const payload = {
+    idsessao,
+    module: "lavajatonatal",
+    request: {
+      parameters: payloadData
+    }
+  };
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.ok) {
+    throw new Error('Falha na comunicação com o servidor ao registrar o serviço.');
+  }
+
+  const data = await response.json();
+
+  if (data.retorno !== 0) {
+    checkAuthError(data.msgerro);
+    throw new Error(data.msgerro || 'Erro ao registrar serviço.');
+  }
+}
+
+export interface APIVehicleInService {
+  idlavagem: number;
+  status: string;
+  entrada: string;
+  minutos: number;
+  cliente: {
+    idcliente: number;
+    nome: string;
+    telefone: string;
+  };
+  veiculo: {
+    idveiculo: number;
+    placa: string;
+    modelo: string;
+    marca: string;
+    cor?: string;
+  };
+  servicos: {
+    idservico: number;
+    nome: string;
+    quantidade: number;
+    valor: number;
+  }[];
+  total: number;
+}
+
+/**
+ * Lista os veículos que estão atualmente em atendimento utilizando o endpoint cliente_ematendimento.
+ */
+export async function listVehiclesInServiceApi(): Promise<APIVehicleInService[]> {
+  const { token, idsessao } = getAuthData();
+  const BASE_URL = import.meta.env.DEV ? '' : 'https://nexus.frconnect.com.br';
+  const url = `${BASE_URL}/carwash/v1/services/cliente_ematendimento`;
+
+  const payload = {
+    idsessao,
+    module: "lavajatonatal",
+    request: {
+      parameters: {}
+    }
+  };
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.ok) {
+    throw new Error('Falha na comunicação com o servidor ao listar veículos em atendimento.');
+  }
+
+  const data = await response.json();
+
+  if (data.retorno !== 0) {
+    checkAuthError(data.msgerro);
+    throw new Error(data.msgerro || 'Erro ao listar veículos em atendimento.');
+  }
+
+  return data.payload?.lista || [];
+}

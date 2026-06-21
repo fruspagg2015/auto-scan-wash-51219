@@ -552,7 +552,6 @@ export default function Clientes() {
                   <TableHead>Nome</TableHead>
                   <TableHead>Tipo</TableHead>
                   <TableHead>Contato</TableHead>
-                  <TableHead>Cidade</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Ações</TableHead>
                 </TableRow>
@@ -560,7 +559,7 @@ export default function Clientes() {
               <TableBody>
                 {filteredClientes.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                    <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
                       Nenhum cliente encontrado
                     </TableCell>
                   </TableRow>
@@ -579,7 +578,6 @@ export default function Clientes() {
                           {cliente.email && <div className="text-muted-foreground">{cliente.email}</div>}
                         </div>
                       </TableCell>
-                      <TableCell>{cliente.cidade || "-"}</TableCell>
                       <TableCell>
                         <Badge variant={cliente.status === "Ativo" ? "default" : "secondary"}>
                           {cliente.status}
