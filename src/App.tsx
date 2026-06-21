@@ -7,6 +7,7 @@ import Atendimento from "./pages/Atendimento";
 import Login from "./pages/Login";
 import { AuthProvider } from "./contexts/AuthContext";
 import { ProtectedRoute } from "./components/ProtectedRoute";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import NotFound from "./pages/NotFound";
 import CameraCapture from "./pages/CameraCapture";
 import VehicleDetails from "./pages/VehicleDetails";
@@ -23,7 +24,8 @@ import Usuarios from "./pages/Usuarios";
 const queryClient = new QueryClient();
 
 const App = () => (
-  <QueryClientProvider client={queryClient}>
+  <ErrorBoundary>
+    <QueryClientProvider client={queryClient}>
     <AuthProvider>
       <Toaster />
       <Sonner />
@@ -100,7 +102,8 @@ const App = () => (
         </Routes>
       </BrowserRouter>
     </AuthProvider>
-  </QueryClientProvider>
+    </QueryClientProvider>
+  </ErrorBoundary>
 );
 
 export default App;
