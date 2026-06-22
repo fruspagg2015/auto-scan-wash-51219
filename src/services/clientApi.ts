@@ -433,3 +433,123 @@ export async function listVehiclesInServiceApi(): Promise<APIVehicleInService[]>
 
   return data.payload?.lista || [];
 }
+
+/**
+ * Conclui um veículo em atendimento utilizando o endpoint veiculo_concluir.
+ */
+export async function concluirVeiculoApi(idlavagem: number): Promise<void> {
+  const { token, idsessao } = getAuthData();
+  const BASE_URL = import.meta.env.DEV ? '' : 'https://nexus.frconnect.com.br';
+  const url = `${BASE_URL}/carwash/v1/services/veiculo_concluir`;
+
+  const payload = {
+    idsessao,
+    module: "lavajatonatal",
+    request: {
+      parameters: {
+        idlavagem
+      }
+    }
+  };
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.ok) {
+    throw new Error('Falha na comunicação com o servidor ao concluir o veículo.');
+  }
+
+  const data = await response.json();
+
+  if (data.retorno !== 0) {
+    checkAuthError(data.msgerro);
+    throw new Error(data.msgerro || 'Erro ao concluir o veículo.');
+  }
+}
+
+/**
+ * Lista os veículos prontos para entrega utilizando o endpoint veiculo_entregar_listar.
+ */
+export async function listVehiclesToDeliverApi(): Promise<APIVehicleInService[]> {
+  const { token, idsessao } = getAuthData();
+  const BASE_URL = import.meta.env.DEV ? '' : 'https://nexus.frconnect.com.br';
+  const url = `${BASE_URL}/carwash/v1/services/veiculo_entregar_listar`;
+
+  const payload = {
+    idsessao,
+    module: "lavajatonatal",
+    request: {
+      parameters: {}
+    }
+  };
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.ok) {
+    throw new Error('Falha na comunicação com o servidor ao listar veículos para entrega.');
+  }
+
+  const data = await response.json();
+
+  if (data.retorno !== 0) {
+    checkAuthError(data.msgerro);
+    throw new Error(data.msgerro || 'Erro ao listar veículos para entrega.');
+  }
+
+  return data.payload?.lista || [];
+}
+
+/**
+ * Confirma a entrega do veículo utilizando o endpoint veiculo_entregar.
+ */
+export async function entregarVeiculoApi(idlavagem: number): Promise<void> {
+  const { token, idsessao } = getAuthData();
+  const BASE_URL = import.meta.env.DEV ? '' : 'https://nexus.frconnect.com.br';
+  const url = `${BASE_URL}/carwash/v1/services/veiculo_entregar`;
+
+  const payload = {
+    idsessao,
+    module: "lavajatonatal",
+    request: {
+      parameters: {
+        idlavagem
+      }
+    }
+  };
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.ok) {
+    throw new Error('Falha na comunicação com o servidor ao confirmar entrega do veículo.');
+  }
+
+  const data = await response.json();
+
+  if (data.retorno !== 0) {
+    checkAuthError(data.msgerro);
+    throw new Error(data.msgerro || 'Erro ao confirmar entrega do veículo.');
+  }
+}
+
+
+
