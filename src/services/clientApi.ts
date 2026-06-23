@@ -66,6 +66,29 @@ const checkAuthError = (msgerro: string) => {
   return false;
 };
 
+async function handleResponse<T>(response: Response, defaultError: string): Promise<T> {
+  let data: any;
+  try {
+    data = await response.json();
+  } catch (e) {
+    if (!response.ok) {
+      throw new Error(`Falha na comunicação com o servidor: ${defaultError}`);
+    }
+    throw new Error('Resposta do servidor inválida.');
+  }
+
+  if (data && typeof data === 'object' && 'retorno' in data) {
+    if (data.retorno !== 0) {
+      checkAuthError(data.msgerro);
+      throw new Error(data.msgerro || defaultError);
+    }
+  } else if (!response.ok) {
+    throw new Error(`Falha na comunicação com o servidor: ${defaultError}`);
+  }
+
+  return data as T;
+}
+
 /**
  * Lista os clientes utilizando o novo endpoint da API.
  * @param nomeFilter Filtro opcional por nome
@@ -101,16 +124,7 @@ export async function listClientsApi(nomeFilter: string = ""): Promise<BackendCl
     body: JSON.stringify(payload)
   });
 
-  if (!response.ok) {
-    throw new Error('Falha na comunicação com o servidor ao listar clientes.');
-  }
-
-  const data: ClientListResponse = await response.json();
-
-  if (data.retorno !== 0) {
-    checkAuthError(data.msgerro);
-    throw new Error(data.msgerro || 'Erro ao listar clientes.');
-  }
+  const data = await handleResponse<ClientListResponse>(response, 'Erro ao listar clientes.');
 
   if (!data.payload || typeof data.payload === 'string') {
     return [];
@@ -144,16 +158,7 @@ export async function saveClientApi(clientData: ClientSavePayload): Promise<void
     body: JSON.stringify(payload)
   });
 
-  if (!response.ok) {
-    throw new Error('Falha na comunicação com o servidor ao salvar cliente.');
-  }
-
-  const data: ClientSaveResponse = await response.json();
-
-  if (data.retorno !== 0) {
-    checkAuthError(data.msgerro);
-    throw new Error(data.msgerro || 'Erro ao salvar cliente.');
-  }
+  const data = await handleResponse<ClientSaveResponse>(response, 'Erro ao salvar cliente.');
 
   return data.payload;
 }
@@ -185,16 +190,7 @@ export async function deleteClientApi(clientId: number): Promise<void> {
     body: JSON.stringify(payload)
   });
 
-  if (!response.ok) {
-    throw new Error('Falha na comunicação com o servidor ao excluir cliente.');
-  }
-
-  const data: ClientSaveResponse = await response.json();
-
-  if (data.retorno !== 0) {
-    checkAuthError(data.msgerro);
-    throw new Error(data.msgerro || 'Erro ao excluir cliente.');
-  }
+  await handleResponse<ClientSaveResponse>(response, 'Erro ao excluir cliente.');
 }
 
 export interface ConsultarPlacaResponse {
@@ -244,18 +240,7 @@ export async function consultarPlacaApi(placa: string): Promise<ConsultarPlacaRe
     body: JSON.stringify(payload)
   });
 
-  if (!response.ok) {
-    throw new Error('Falha na comunicação com o servidor ao consultar placa.');
-  }
-
-  const data: ConsultarPlacaResponse = await response.json();
-
-  if (data.retorno !== 0) {
-    checkAuthError(data.msgerro);
-    throw new Error(data.msgerro || 'Erro ao consultar placa.');
-  }
-
-  return data;
+  return await handleResponse<ConsultarPlacaResponse>(response, 'Erro ao consultar placa.');
 }
 
 export interface BackendServiceItem {
@@ -310,30 +295,29 @@ export async function listServicesApi(): Promise<BackendService[]> {
     body: JSON.stringify(payload)
   });
 
-  if (!response.ok) {
-    throw new Error('Falha na comunicação com o servidor ao listar serviços.');
-  }
-
-  const data: ServiceListResponse = await response.json();
-
-  if (data.retorno !== 0) {
-    checkAuthError(data.msgerro);
-    throw new Error(data.msgerro || 'Erro ao listar serviços.');
-  }
+  const data = await handleResponse<ServiceListResponse>(response, 'Erro ao listar serviços.');
 
   return data.payload?.dados || [];
 }
 
-export interface AddServicePayload {
-  idcliente: number;
+export interface AddServiceItem {
   idservico: number;
-  idveiculo: number;
   quantidade: number;
+  valor_unitario: number;
   observacao?: string;
 }
 
+export interface AddServicePayload {
+  idcliente: number;
+  idveiculo: number;
+  tipo_atendimento: 'fila' | 'agendado';
+  data_agendamento: string | null;
+  observacao_geral?: string;
+  servicos: AddServiceItem[];
+}
+
 /**
- * Vincula um serviço ao cliente e veículo utilizando o novo endpoint da API.
+ * Vincula múltiplos serviços ao cliente e veículo utilizando o novo endpoint da API.
  */
 export async function addServiceToClientApi(payloadData: AddServicePayload): Promise<void> {
   const { token, idsessao } = getAuthData();
@@ -357,16 +341,7 @@ export async function addServiceToClientApi(payloadData: AddServicePayload): Pro
     body: JSON.stringify(payload)
   });
 
-  if (!response.ok) {
-    throw new Error('Falha na comunicação com o servidor ao registrar o serviço.');
-  }
-
-  const data = await response.json();
-
-  if (data.retorno !== 0) {
-    checkAuthError(data.msgerro);
-    throw new Error(data.msgerro || 'Erro ao registrar serviço.');
-  }
+  await handleResponse<any>(response, 'Erro ao registrar serviço.');
 }
 
 export interface APIVehicleInService {
@@ -420,16 +395,7 @@ export async function listVehiclesInServiceApi(): Promise<APIVehicleInService[]>
     body: JSON.stringify(payload)
   });
 
-  if (!response.ok) {
-    throw new Error('Falha na comunicação com o servidor ao listar veículos em atendimento.');
-  }
-
-  const data = await response.json();
-
-  if (data.retorno !== 0) {
-    checkAuthError(data.msgerro);
-    throw new Error(data.msgerro || 'Erro ao listar veículos em atendimento.');
-  }
+  const data = await handleResponse<any>(response, 'Erro ao listar veículos em atendimento.');
 
   return data.payload?.lista || [];
 }
@@ -461,16 +427,7 @@ export async function concluirVeiculoApi(idlavagem: number): Promise<void> {
     body: JSON.stringify(payload)
   });
 
-  if (!response.ok) {
-    throw new Error('Falha na comunicação com o servidor ao concluir o veículo.');
-  }
-
-  const data = await response.json();
-
-  if (data.retorno !== 0) {
-    checkAuthError(data.msgerro);
-    throw new Error(data.msgerro || 'Erro ao concluir o veículo.');
-  }
+  await handleResponse<any>(response, 'Erro ao concluir o veículo.');
 }
 
 /**
@@ -498,16 +455,7 @@ export async function listVehiclesToDeliverApi(): Promise<APIVehicleInService[]>
     body: JSON.stringify(payload)
   });
 
-  if (!response.ok) {
-    throw new Error('Falha na comunicação com o servidor ao listar veículos para entrega.');
-  }
-
-  const data = await response.json();
-
-  if (data.retorno !== 0) {
-    checkAuthError(data.msgerro);
-    throw new Error(data.msgerro || 'Erro ao listar veículos para entrega.');
-  }
+  const data = await handleResponse<any>(response, 'Erro ao listar veículos para entrega.');
 
   return data.payload?.lista || [];
 }
@@ -539,16 +487,7 @@ export async function entregarVeiculoApi(idlavagem: number): Promise<void> {
     body: JSON.stringify(payload)
   });
 
-  if (!response.ok) {
-    throw new Error('Falha na comunicação com o servidor ao confirmar entrega do veículo.');
-  }
-
-  const data = await response.json();
-
-  if (data.retorno !== 0) {
-    checkAuthError(data.msgerro);
-    throw new Error(data.msgerro || 'Erro ao confirmar entrega do veículo.');
-  }
+  await handleResponse<any>(response, 'Erro ao confirmar entrega do veículo.');
 }
 
 

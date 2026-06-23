@@ -212,15 +212,7 @@ export default function ConcluirVeiculo() {
                     </div>
                   )}
 
-                  <div className="border-t pt-3 flex items-center justify-between">
-                    <div className="flex items-center gap-1.5">
-                      <DollarSign className="h-4 w-4 text-wash-green" />
-                      <span className="text-sm text-muted-foreground">Total:</span>
-                    </div>
-                    <span className="text-lg font-bold text-wash-green">
-                      R$ {item.total?.toFixed(2) || "0,00"}
-                    </span>
-                  </div>
+
 
                   <Button 
                     onClick={() => concluirVeiculo(item.idlavagem, placa)}

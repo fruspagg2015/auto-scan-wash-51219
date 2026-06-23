@@ -25,7 +25,9 @@ interface VehicleData {
   cor: string;
   hora_chegada: string;
   imagem: string;
+  idplaca?: number;
   cliente?: {
+    id?: number;
     nome: string;
     telefone: string;
     email?: string;
@@ -107,17 +109,32 @@ const VehicleDetails = () => {
     setIsSubmitting(true);
 
     try {
-      const promessas = servicosSelecionados.map(idservico => 
-        addServiceToClientApi({
-          idcliente: vehicleData.cliente!.id!,
-          idservico: idservico,
-          idveiculo: vehicleData.idplaca!,
+      const servicosPayload = servicosSelecionados.map(idservico => {
+        const servicoOriginal = servicosDisponiveis.find(s => s.idservico === idservico);
+        return {
+          idservico,
           quantidade: 1,
+          valor_unitario: servicoOriginal ? servicoOriginal.valor : 0,
           observacao: ""
-        })
-      );
+        };
+      });
 
-      await Promise.all(promessas);
+      let dataAgendamentoStr: string | null = null;
+      if (tipoAtendimento === 'agendado' && dataAgendamento && horaAgendamento) {
+        const [horas, minutos] = horaAgendamento.split(':').map(Number);
+        const dataComHora = new Date(dataAgendamento);
+        dataComHora.setHours(horas, minutos, 0, 0);
+        dataAgendamentoStr = dataComHora.toISOString();
+      }
+
+      await addServiceToClientApi({
+        idcliente: vehicleData.cliente.id,
+        idveiculo: vehicleData.idplaca,
+        tipo_atendimento: tipoAtendimento as 'fila' | 'agendado',
+        data_agendamento: dataAgendamentoStr,
+        observacao_geral: "",
+        servicos: servicosPayload
+      });
 
       toast.success("Serviço(s) confirmado(s) e registrado(s) com sucesso!");
       navigate('/dashboard');
