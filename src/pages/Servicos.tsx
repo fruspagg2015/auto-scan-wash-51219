@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -8,91 +8,128 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { Plus, Search, Edit, Trash2, Car, Clock, Droplets } from "lucide-react"
+import { Plus, Search, Edit, Trash2, Car, Clock, Droplets, Loader2 } from "lucide-react"
+import { listServicesApi, BackendService } from "@/services/clientApi"
+import { useToast } from "@/hooks/use-toast"
 
-// Mock data
-const mockServicos = [
-  {
-    id: 1,
-    nome: "Lavagem Completa",
-    categoria: "Lavagem",
-    descricao: "Lavagem externa e interna completa",
-    duracao: 45,
-    preco: 25.00,
-    ativo: true,
-    itens: ["Lavagem externa", "Aspiração", "Limpeza vidros", "Pneus"]
-  },
-  {
-    id: 2,
-    nome: "Enceramento",
-    categoria: "Proteção",
-    descricao: "Aplicação de cera protetora na pintura",
-    duracao: 30,
-    preco: 35.00,
-    ativo: true,
-    itens: ["Cera premium", "Lustração", "Proteção UV"]
-  },
-  {
-    id: 3,
-    nome: "Lavagem Simples",
-    categoria: "Lavagem",
-    descricao: "Lavagem externa básica",
-    duracao: 20,
-    preco: 15.00,
-    ativo: true,
-    itens: ["Lavagem externa", "Secagem"]
-  }
-]
-
-const categorias = ["Lavagem", "Proteção", "Detalhamento", "Manutenção"]
+const categorias = ["Lavagem", "Proteção", "Estética", "Detalhamento", "Manutenção"]
 
 export default function Servicos() {
+  const { toast } = useToast()
+  const [servicos, setServicos] = useState<BackendService[]>([])
+  const [isLoading, setIsLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
   const [isDialogOpen, setIsDialogOpen] = useState(false)
-  const [editingServico, setEditingServico] = useState<typeof mockServicos[0] | null>(null)
+  const [editingServico, setEditingServico] = useState<BackendService | null>(null)
   const [formData, setFormData] = useState({
     nome: "",
     categoria: "",
     descricao: "",
-    duracao: "",
-    preco: "",
+    tempoestimado: "",
+    valor: "",
     itens: ""
   })
 
-  const filteredServicos = mockServicos.filter(servico =>
+  const loadServicos = async () => {
+    try {
+      setIsLoading(true)
+      const data = await listServicesApi()
+      setServicos(data)
+    } catch (error: any) {
+      console.error('Error loading services:', error)
+      toast({
+        title: "Erro ao carregar serviços",
+        description: error.message || "Não foi possível carregar a lista de serviços.",
+        variant: "destructive"
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadServicos()
+  }, [])
+
+  const filteredServicos = servicos.filter(servico =>
     servico.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    servico.categoria.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    servico.descricao.toLowerCase().includes(searchTerm.toLowerCase())
+    (servico.categoria && servico.categoria.toLowerCase().includes(searchTerm.toLowerCase())) ||
+    (servico.descricao && servico.descricao.toLowerCase().includes(searchTerm.toLowerCase()))
   )
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+    
+    const valorNum = parseFloat(formData.valor) || 0
+    const tempoNum = parseInt(formData.tempoestimado) || 0
+    
+    const itensArray = formData.itens.split(",")
+      .map(item => item.trim())
+      .filter(item => item.length > 0)
+      .map((item, index) => ({
+        idservicoitem: Date.now() + index,
+        descricao: item,
+        incluso: true,
+        ordem: index + 1
+      }))
+
     if (editingServico) {
-      console.log("Serviço editado:", { ...editingServico, ...formData })
+      setServicos(prev => prev.map(s => 
+        s.idservico === editingServico.idservico 
+          ? {
+              ...s,
+              nome: formData.nome,
+              categoria: formData.categoria,
+              descricao: formData.descricao,
+              tempoestimado: tempoNum,
+              valor: valorNum,
+              itens: itensArray
+            }
+          : s
+      ))
+      toast({
+        title: "Serviço atualizado",
+        description: "Os dados do serviço foram salvos localmente com sucesso."
+      })
     } else {
-      console.log("Serviço cadastrado:", formData)
+      const novoServico: BackendService = {
+        idservico: Date.now(),
+        nome: formData.nome,
+        categoria: formData.categoria,
+        descricao: formData.descricao,
+        tempoestimado: tempoNum,
+        valor: valorNum,
+        ativo: true,
+        itens: itensArray
+      }
+      setServicos(prev => [novoServico, ...prev])
+      toast({
+        title: "Serviço cadastrado",
+        description: "Serviço adicionado localmente com sucesso."
+      })
     }
+    
     setIsDialogOpen(false)
     setEditingServico(null)
     setFormData({
       nome: "",
       categoria: "",
       descricao: "",
-      duracao: "",
-      preco: "",
+      tempoestimado: "",
+      valor: "",
       itens: ""
     })
   }
 
-  const handleEdit = (servico: typeof mockServicos[0]) => {
+  const handleEdit = (servico: BackendService) => {
     setEditingServico(servico)
     setFormData({
       nome: servico.nome,
-      categoria: servico.categoria,
-      descricao: servico.descricao,
-      duracao: servico.duracao.toString(),
-      preco: servico.preco.toString(),
-      itens: servico.itens.join(", ")
+      categoria: servico.categoria || "",
+      descricao: servico.descricao || "",
+      tempoestimado: servico.tempoestimado ? servico.tempoestimado.toString() : "",
+      valor: servico.valor ? servico.valor.toString() : "",
+      itens: servico.itens ? servico.itens.map(i => i.descricao).join(", ") : ""
     })
     setIsDialogOpen(true)
   }
@@ -104,8 +141,8 @@ export default function Servicos() {
       nome: "",
       categoria: "",
       descricao: "",
-      duracao: "",
-      preco: "",
+      tempoestimado: "",
+      valor: "",
       itens: ""
     })
   }
@@ -121,7 +158,8 @@ export default function Servicos() {
     const colors: Record<string, string> = {
       "Lavagem": "bg-blue-500/10 text-blue-700 border-blue-200",
       "Proteção": "bg-green-500/10 text-green-700 border-green-200", 
-      "Detalhamento": "bg-purple-500/10 text-purple-700 border-purple-200",
+      "Estética": "bg-purple-500/10 text-purple-700 border-purple-200",
+      "Detalhamento": "bg-indigo-500/10 text-indigo-700 border-indigo-200",
       "Manutenção": "bg-orange-500/10 text-orange-700 border-orange-200"
     }
     return colors[categoria] || "bg-gray-500/10 text-gray-700 border-gray-200"
@@ -183,25 +221,25 @@ export default function Servicos() {
                 </div>
                 
                 <div className="space-y-2">
-                  <Label htmlFor="duracao">Duração (minutos) *</Label>
+                  <Label htmlFor="tempoestimado">Duração (minutos) *</Label>
                   <Input
-                    id="duracao"
+                    id="tempoestimado"
                     type="number"
-                    value={formData.duracao}
-                    onChange={(e) => setFormData({...formData, duracao: e.target.value})}
+                    value={formData.tempoestimado}
+                    onChange={(e) => setFormData({...formData, tempoestimado: e.target.value})}
                     placeholder="Ex: 30"
                     required
                   />
                 </div>
                 
                 <div className="space-y-2">
-                  <Label htmlFor="preco">Preço (R$) *</Label>
+                  <Label htmlFor="valor">Preço (R$) *</Label>
                   <Input
-                    id="preco"
+                    id="valor"
                     type="number"
                     step="0.01"
-                    value={formData.preco}
-                    onChange={(e) => setFormData({...formData, preco: e.target.value})}
+                    value={formData.valor}
+                    onChange={(e) => setFormData({...formData, valor: e.target.value})}
                     placeholder="Ex: 25.00"
                     required
                   />
@@ -267,7 +305,7 @@ export default function Servicos() {
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Total Serviços</p>
-                <p className="text-lg font-semibold">{mockServicos.length}</p>
+                <p className="text-lg font-semibold">{servicos.length}</p>
               </div>
             </div>
           </CardContent>
@@ -281,7 +319,7 @@ export default function Servicos() {
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Ativos</p>
-                <p className="text-lg font-semibold">{mockServicos.filter(s => s.ativo).length}</p>
+                <p className="text-lg font-semibold">{servicos.filter(s => s.ativo).length}</p>
               </div>
             </div>
           </CardContent>
@@ -296,7 +334,7 @@ export default function Servicos() {
               <div>
                 <p className="text-xs text-muted-foreground">Tempo Médio</p>
                 <p className="text-lg font-semibold">
-                  {Math.round(mockServicos.reduce((acc, s) => acc + s.duracao, 0) / mockServicos.length)} min
+                  {servicos.length > 0 ? Math.round(servicos.reduce((acc, s) => acc + (s.tempoestimado || 0), 0) / servicos.length) : 0} min
                 </p>
               </div>
             </div>
@@ -312,7 +350,7 @@ export default function Servicos() {
               <div>
                 <p className="text-xs text-muted-foreground">Preço Médio</p>
                 <p className="text-lg font-semibold">
-                  {formatPrice(mockServicos.reduce((acc, s) => acc + s.preco, 0) / mockServicos.length)}
+                  {formatPrice(servicos.length > 0 ? servicos.reduce((acc, s) => acc + (s.valor || 0), 0) / servicos.length : 0)}
                 </p>
               </div>
             </div>
@@ -343,61 +381,81 @@ export default function Servicos() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredServicos.map((servico) => (
-                  <TableRow key={servico.id}>
-                    <TableCell>
-                      <div>
-                        <div className="font-medium">{servico.nome}</div>
-                        <div className="text-sm text-muted-foreground">{servico.descricao}</div>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge className={getCategoryColor(servico.categoria)}>
-                        {servico.categoria}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Clock className="h-4 w-4 text-muted-foreground" />
-                        {servico.duracao} min
-                      </div>
-                    </TableCell>
-                    <TableCell className="font-medium text-green-600">
-                      {formatPrice(servico.preco)}
-                    </TableCell>
-                    <TableCell>
-                      <div className="text-sm">
-                        {servico.itens.slice(0, 2).map((item, index) => (
-                          <div key={index} className="text-muted-foreground">• {item}</div>
-                        ))}
-                        {servico.itens.length > 2 && (
-                          <div className="text-xs text-muted-foreground">
-                            +{servico.itens.length - 2} mais
-                          </div>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={servico.ativo ? "default" : "secondary"}>
-                        {servico.ativo ? "Ativo" : "Inativo"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex gap-2">
-                        <Button 
-                          variant="ghost" 
-                          size="sm"
-                          onClick={() => handleEdit(servico)}
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button variant="ghost" size="sm">
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                {isLoading ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-center py-8">
+                      <div className="flex flex-col items-center justify-center gap-2">
+                        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                        <span className="text-sm text-muted-foreground">Carregando serviços...</span>
                       </div>
                     </TableCell>
                   </TableRow>
-                ))}
+                ) : filteredServicos.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                      Nenhum serviço encontrado
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  filteredServicos.map((servico) => (
+                    <TableRow key={servico.idservico}>
+                      <TableCell>
+                        <div>
+                          <div className="font-medium">{servico.nome}</div>
+                          <div className="text-sm text-muted-foreground">{servico.descricao}</div>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge className={getCategoryColor(servico.categoria)}>
+                          {servico.categoria}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <Clock className="h-4 w-4 text-muted-foreground" />
+                          {servico.tempoestimado} min
+                        </div>
+                      </TableCell>
+                      <TableCell className="font-medium text-green-600 font-mono">
+                        {formatPrice(servico.valor)}
+                      </TableCell>
+                      <TableCell>
+                        <div className="text-sm">
+                          {servico.itens && servico.itens.slice(0, 2).map((item, index) => (
+                            <div key={index} className="text-muted-foreground">• {item.descricao}</div>
+                          ))}
+                          {servico.itens && servico.itens.length > 2 && (
+                            <div className="text-xs text-muted-foreground font-semibold text-primary">
+                              +{servico.itens.length - 2} mais
+                            </div>
+                          )}
+                          {(!servico.itens || servico.itens.length === 0) && (
+                            <div className="text-xs text-muted-foreground italic">Nenhum item</div>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={servico.ativo ? "default" : "secondary"}>
+                          {servico.ativo ? "Ativo" : "Inativo"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex gap-2">
+                          <Button 
+                            variant="ghost" 
+                            size="sm"
+                            onClick={() => handleEdit(servico)}
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-destructive hover:bg-destructive/10">
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
               </TableBody>
             </Table>
           </div>

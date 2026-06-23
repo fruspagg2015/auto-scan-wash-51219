@@ -8,11 +8,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { Plus, Search, Edit, Trash2, Phone, Mail, MapPin, Loader2 } from "lucide-react"
+import { Plus, Search, Edit, Trash2, Phone, Mail, MapPin, Loader2, Car } from "lucide-react"
 import { useAuth } from "@/contexts/AuthContext"
 import { useToast } from "@/hooks/use-toast"
 import { z } from "zod"
-import { listClientsApi, saveClientApi, deleteClientApi, ClientSavePayload } from "@/services/clientApi"
+import { listClientsApi, saveClientApi, deleteClientApi, ClientSavePayload, ClientVehicle, deleteVehicleApi } from "@/services/clientApi"
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -41,6 +42,7 @@ interface Client {
   numero?: string
   idcidade?: number
   idbairro?: number
+  veiculos?: ClientVehicle[]
 }
 
 const clientSchema = z.object({
@@ -66,6 +68,8 @@ export default function Clientes() {
   const [editingClient, setEditingClient] = useState<Client | null>(null)
   const [clientToDelete, setClientToDelete] = useState<Client | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [vehicleToDelete, setVehicleToDelete] = useState<ClientVehicle | null>(null)
+  const [isUnlinkingVehicle, setIsUnlinkingVehicle] = useState(false)
   const [formData, setFormData] = useState({
     nome: "",
     telefone: "",
@@ -98,7 +102,8 @@ export default function Clientes() {
         documento: c.documento || '',
         numero: c.numero || '',
         idcidade: c.idcidade || 1,
-        idbairro: c.idbairro || 1
+        idbairro: c.idbairro || 1,
+        veiculos: c.veiculos || []
       }))
 
       setClients(mappedClients)
@@ -122,10 +127,18 @@ export default function Clientes() {
     const term = searchTerm.toLowerCase()
     const cleanTerm = searchTerm.replace(/\D/g, '')
     const cleanPhone = cliente.telefone.replace(/\D/g, '')
+    
+    const matchesVehicle = cliente.veiculos?.some(v => 
+      v.placa.toLowerCase().includes(term) || 
+      v.modelo.toLowerCase().includes(term) ||
+      v.marca.toLowerCase().includes(term)
+    ) || false
+
     return cliente.nome.toLowerCase().includes(term) ||
       (cliente.email && cliente.email.toLowerCase().includes(term)) ||
       cliente.telefone.includes(searchTerm) ||
-      (cleanTerm && cleanPhone.includes(cleanTerm))
+      (cleanTerm && cleanPhone.includes(cleanTerm)) ||
+      matchesVehicle
   })
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -251,6 +264,40 @@ export default function Clientes() {
     }
   }
 
+  const handleUnlinkVehicleConfirm = async () => {
+    if (!vehicleToDelete || !editingClient) return
+
+    setIsUnlinkingVehicle(true)
+    try {
+      await deleteVehicleApi(vehicleToDelete.idveiculo)
+
+      toast({
+        title: "Veículo desvinculado",
+        description: `O veículo de placa ${vehicleToDelete.placa} foi desvinculado com sucesso.`
+      })
+
+      // Atualiza o state local do cliente em edicao
+      setEditingClient({
+        ...editingClient,
+        veiculos: editingClient.veiculos?.filter(v => v.idveiculo !== vehicleToDelete.idveiculo) || []
+      })
+
+      // Recarrega a lista de clientes para sincronizar a tabela principal
+      loadClients()
+      setVehicleToDelete(null)
+    } catch (error: any) {
+      console.error('Error unlinking vehicle:', error)
+      toast({
+        title: "Erro ao desvincular veículo",
+        description: error.message || "Não foi possível desvincular o veículo. Tente novamente.",
+        variant: "destructive"
+      })
+    } finally {
+      setIsUnlinkingVehicle(false)
+    }
+  }
+
+
   const formatPhone = (value: string) => {
     const numbers = value.replace(/\D/g, '')
     
@@ -344,120 +391,328 @@ export default function Clientes() {
               </DialogDescription>
             </DialogHeader>
             
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="nome">Nome/Razão Social *</Label>
-                  <Input
-                    id="nome"
-                    value={formData.nome}
-                    onChange={(e) => setFormData({...formData, nome: e.target.value})}
-                    required
-                  />
-                </div>
+            {editingClient ? (
+              <Tabs defaultValue="dados" className="w-full">
+                <TabsList className="grid w-full grid-cols-2 mb-4">
+                  <TabsTrigger value="dados">Dados Pessoais</TabsTrigger>
+                  <TabsTrigger value="veiculos">Veículos ({editingClient.veiculos?.length || 0})</TabsTrigger>
+                </TabsList>
                 
-                <div className="space-y-2">
-                  <Label htmlFor="tipo">Tipo</Label>
-                  <Select value={formData.tipo} onValueChange={(value) => setFormData({...formData, tipo: value})}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Pessoa Física">Pessoa Física</SelectItem>
-                      <SelectItem value="Pessoa Jurídica">Pessoa Jurídica</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="telefone">Telefone *</Label>
-                  <Input
-                    id="telefone"
-                    value={formData.telefone}
-                    onChange={handlePhoneChange}
-                    placeholder="(11) 99999-9999"
-                    maxLength={15}
-                    required
-                  />
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="documento">CPF/CNPJ</Label>
-                  <Input
-                    id="documento"
-                    value={formData.documento}
-                    onChange={handleDocumentChange}
-                    placeholder="000.000.000-00 ou 00.000.000/0000-00"
-                    maxLength={18}
-                  />
-                </div>
+                <TabsContent value="dados" className="mt-0">
+                  <form onSubmit={handleSubmit} className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="nome">Nome/Razão Social *</Label>
+                        <Input
+                          id="nome"
+                          value={formData.nome}
+                          onChange={(e) => setFormData({...formData, nome: e.target.value})}
+                          required
+                        />
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <Label htmlFor="tipo">Tipo</Label>
+                        <Select value={formData.tipo} onValueChange={(value) => setFormData({...formData, tipo: value})}>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Pessoa Física">Pessoa Física</SelectItem>
+                            <SelectItem value="Pessoa Jurídica">Pessoa Jurídica</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <Label htmlFor="telefone">Telefone *</Label>
+                        <Input
+                          id="telefone"
+                          value={formData.telefone}
+                          onChange={handlePhoneChange}
+                          placeholder="(11) 99999-9999"
+                          maxLength={15}
+                          required
+                        />
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <Label htmlFor="documento">CPF/CNPJ</Label>
+                        <Input
+                          id="documento"
+                          value={formData.documento}
+                          onChange={handleDocumentChange}
+                          placeholder="000.000.000-00 ou 00.000.000/0000-00"
+                          maxLength={18}
+                        />
+                      </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="email">E-mail</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    value={formData.email}
-                    onChange={(e) => setFormData({...formData, email: e.target.value})}
-                  />
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="endereco">Endereço (Logradouro)</Label>
-                  <Input
-                    id="endereco"
-                    value={formData.endereco}
-                    onChange={(e) => setFormData({...formData, endereco: e.target.value})}
-                    placeholder="Rua, Avenida, etc."
-                  />
-                </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="email">E-mail</Label>
+                        <Input
+                          id="email"
+                          type="email"
+                          value={formData.email}
+                          onChange={(e) => setFormData({...formData, email: e.target.value})}
+                        />
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <Label htmlFor="endereco">Endereço (Logradouro)</Label>
+                        <Input
+                          id="endereco"
+                          value={formData.endereco}
+                          onChange={(e) => setFormData({...formData, endereco: e.target.value})}
+                          placeholder="Rua, Avenida, etc."
+                        />
+                      </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="numero">Número</Label>
-                  <Input
-                    id="numero"
-                    value={formData.numero}
-                    onChange={(e) => setFormData({...formData, numero: e.target.value})}
-                    placeholder="123 ou S/N"
-                  />
+                      <div className="space-y-2">
+                        <Label htmlFor="numero">Número</Label>
+                        <Input
+                          id="numero"
+                          value={formData.numero}
+                          onChange={(e) => setFormData({...formData, numero: e.target.value})}
+                          placeholder="123 ou S/N"
+                        />
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <Label htmlFor="cidade">Cidade</Label>
+                        <Input
+                          id="cidade"
+                          value={formData.cidade}
+                          onChange={(e) => setFormData({...formData, cidade: e.target.value})}
+                        />
+                      </div>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <Label htmlFor="observacoes">Observações</Label>
+                      <Textarea
+                        id="observacoes"
+                        value={formData.observacoes}
+                        onChange={(e) => setFormData({...formData, observacoes: e.target.value})}
+                        rows={3}
+                      />
+                    </div>
+                    
+                    <div className="flex gap-2 pt-4">
+                      <Button type="submit" className="flex-1" disabled={isSubmitting}>
+                        {isSubmitting ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Salvando...
+                          </>
+                        ) : (
+                          "Atualizar Cliente"
+                        )}
+                      </Button>
+                      <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)} disabled={isSubmitting}>
+                        Cancelar
+                      </Button>
+                    </div>
+                  </form>
+                </TabsContent>
+                
+                <TabsContent value="veiculos" className="mt-0">
+                  <div className="space-y-4 py-2">
+                    <h3 className="text-sm font-semibold text-muted-foreground flex items-center gap-1.5 mb-3">
+                      <Car className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                      Veículos Cadastrados
+                    </h3>
+                    
+                    {!editingClient.veiculos || editingClient.veiculos.length === 0 ? (
+                      <div className="text-center py-8 border border-dashed rounded-lg border-muted-foreground/20 bg-muted/10">
+                        <Car className="h-8 w-8 mx-auto text-muted-foreground/30 mb-2" />
+                        <p className="text-sm text-muted-foreground">Nenhum veículo vinculado a este cliente.</p>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[40vh] overflow-y-auto pr-1">
+                        {editingClient.veiculos.map((v) => (
+                          <div 
+                            key={v.idveiculo} 
+                            className="flex items-center gap-3 p-3 rounded-lg border border-border bg-card hover:bg-accent/30 transition-colors shadow-sm"
+                          >
+                            {/* Placa Mercosul simulada */}
+                            <div className="flex flex-col border border-blue-400 rounded overflow-hidden w-24 bg-white dark:bg-zinc-950 font-mono shadow-sm flex-shrink-0 select-none">
+                              <div className="bg-blue-600 text-[8px] text-white py-0.5 px-1.5 flex justify-between items-center font-sans font-extrabold tracking-wide leading-none">
+                                <span>BRASIL</span>
+                                <span className="text-[6px] leading-none">🇧🇷</span>
+                              </div>
+                              <div className="py-0.5 text-center font-bold text-xs tracking-wider text-zinc-900 dark:text-zinc-100 uppercase">
+                                {v.placa}
+                              </div>
+                            </div>
+                            
+                            {/* Detalhes do veículo */}
+                            <div className="min-w-0 flex-1">
+                              <div className="text-sm font-semibold truncate text-foreground">{v.modelo}</div>
+                              <div className="text-[11px] text-muted-foreground flex items-center gap-1 truncate">
+                                <span>{v.marca}</span>
+                                <span className="opacity-40">•</span>
+                                <span>{v.ano}</span>
+                              </div>
+                            </div>
+                            
+                            {/* Botão de desvincular */}
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="text-muted-foreground hover:text-destructive hover:bg-destructive/10 flex-shrink-0"
+                              onClick={() => setVehicleToDelete(v)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </TabsContent>
+              </Tabs>
+            ) : (
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="nome">Nome/Razão Social *</Label>
+                    <Input
+                      id="nome"
+                      value={formData.nome}
+                      onChange={(e) => setFormData({...formData, nome: e.target.value})}
+                      required
+                    />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="tipo">Tipo</Label>
+                    <Select value={formData.tipo} onValueChange={(value) => setFormData({...formData, tipo: value})}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Pessoa Física">Pessoa Física</SelectItem>
+                        <SelectItem value="Pessoa Jurídica">Pessoa Jurídica</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="telefone">Telefone *</Label>
+                    <Input
+                      id="telefone"
+                      value={formData.telefone}
+                      onChange={handlePhoneChange}
+                      placeholder="(11) 99999-9999"
+                      maxLength={15}
+                      required
+                    />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="documento">CPF/CNPJ</Label>
+                    <Input
+                      id="documento"
+                      value={formData.documento}
+                      onChange={handleDocumentChange}
+                      placeholder="000.000.000-00 ou 00.000.000/0000-00"
+                      maxLength={18}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="email">E-mail</Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      value={formData.email}
+                      onChange={(e) => setFormData({...formData, email: e.target.value})}
+                    />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="endereco">Endereço (Logradouro)</Label>
+                    <Input
+                      id="endereco"
+                      value={formData.endereco}
+                      onChange={(e) => setFormData({...formData, endereco: e.target.value})}
+                      placeholder="Rua, Avenida, etc."
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="numero">Número</Label>
+                    <Input
+                      id="numero"
+                      value={formData.numero}
+                      onChange={(e) => setFormData({...formData, numero: e.target.value})}
+                      placeholder="123 ou S/N"
+                    />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="cidade">Cidade</Label>
+                    <Input
+                      id="cidade"
+                      value={formData.cidade}
+                      onChange={(e) => setFormData({...formData, cidade: e.target.value})}
+                    />
+                  </div>
                 </div>
                 
                 <div className="space-y-2">
-                  <Label htmlFor="cidade">Cidade</Label>
-                  <Input
-                    id="cidade"
-                    value={formData.cidade}
-                    onChange={(e) => setFormData({...formData, cidade: e.target.value})}
+                  <Label htmlFor="observacoes">Observações</Label>
+                  <Textarea
+                    id="observacoes"
+                    value={formData.observacoes}
+                    onChange={(e) => setFormData({...formData, observacoes: e.target.value})}
+                    rows={3}
                   />
                 </div>
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="observacoes">Observações</Label>
-                <Textarea
-                  id="observacoes"
-                  value={formData.observacoes}
-                  onChange={(e) => setFormData({...formData, observacoes: e.target.value})}
-                  rows={3}
-                />
-              </div>
-              
-              <div className="flex gap-2 pt-4">
-                <Button type="submit" className="flex-1" disabled={isSubmitting}>
-                  {isSubmitting ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Salvando...
-                    </>
-                  ) : (
-                    editingClient ? "Atualizar Cliente" : "Cadastrar Cliente"
-                  )}
-                </Button>
-                <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)} disabled={isSubmitting}>
-                  Cancelar
-                </Button>
-              </div>
-            </form>
+                
+                <div className="flex gap-2 pt-4">
+                  <Button type="submit" className="flex-1" disabled={isSubmitting}>
+                    {isSubmitting ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Salvando...
+                      </>
+                    ) : (
+                      "Cadastrar Cliente"
+                    )}
+                  </Button>
+                  <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)} disabled={isSubmitting}>
+                    Cancelar
+                  </Button>
+                </div>
+              </form>
+            )}
+
+            {/* Confirm Unlink Vehicle Dialog */}
+            <AlertDialog open={!!vehicleToDelete} onOpenChange={(open) => !open && setVehicleToDelete(null)}>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Desvincular Veículo</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Tem certeza que deseja desvincular o veículo de placa <strong>{vehicleToDelete?.placa}</strong> ({vehicleToDelete?.modelo}) deste cliente? O veículo não será mais associado a este cliente.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel disabled={isUnlinkingVehicle}>Cancelar</AlertDialogCancel>
+                  <AlertDialogAction 
+                    onClick={(e) => {
+                      e.preventDefault()
+                      handleUnlinkVehicleConfirm()
+                    }}
+                    disabled={isUnlinkingVehicle}
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  >
+                    {isUnlinkingVehicle ? "Desvinculando..." : "Confirmar"}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           </DialogContent>
         </Dialog>
       </div>
@@ -566,7 +821,23 @@ export default function Clientes() {
                 ) : (
                   filteredClientes.map((cliente) => (
                     <TableRow key={cliente.id}>
-                      <TableCell className="font-medium">{cliente.nome}</TableCell>
+                      <TableCell className="font-medium">
+                        <div className="font-semibold text-foreground">{cliente.nome}</div>
+                        {cliente.veiculos && cliente.veiculos.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5 mt-1.5">
+                            {cliente.veiculos.map((v) => (
+                              <Badge
+                                key={v.idveiculo}
+                                variant="outline"
+                                className="text-[10px] py-0.5 px-2 font-medium bg-blue-50/50 text-blue-700 border-blue-200 dark:bg-blue-950/30 dark:text-blue-400 dark:border-blue-900 flex items-center gap-1"
+                              >
+                                <span className="text-xs">🚗</span>
+                                {v.modelo} <span className="opacity-60">({v.placa})</span>
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
+                      </TableCell>
                       <TableCell>
                         <Badge variant={cliente.tipo === "Pessoa Física" ? "secondary" : "outline"}>
                           {cliente.tipo}

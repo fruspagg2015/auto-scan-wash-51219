@@ -1,3 +1,11 @@
+export interface ClientVehicle {
+  idveiculo: number;
+  placa: string;
+  marca: string;
+  modelo: string;
+  ano: number;
+}
+
 export interface BackendClient {
   id: number;
   nome: string;
@@ -14,7 +22,9 @@ export interface BackendClient {
   numero?: string;
   idcidade?: number;
   idbairro?: number;
+  veiculos?: ClientVehicle[];
 }
+
 
 export interface ClientListResponse {
   retorno: number;
@@ -192,6 +202,37 @@ export async function deleteClientApi(clientId: number): Promise<void> {
 
   await handleResponse<ClientSaveResponse>(response, 'Erro ao excluir cliente.');
 }
+
+/**
+ * Exclui ou desvincula um veículo utilizando o endpoint veiculo_excluir.
+ */
+export async function deleteVehicleApi(idveiculo: number): Promise<void> {
+  const { token, idsessao } = getAuthData();
+  const BASE_URL = import.meta.env.DEV ? '' : 'https://nexus.frconnect.com.br';
+  const url = `${BASE_URL}/carwash/v1/services/veiculo_excluir`;
+
+  const payload = {
+    idsessao,
+    module: "lavajatonatal",
+    request: {
+      parameters: {
+        idveiculo
+      }
+    }
+  };
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(payload)
+  });
+
+  await handleResponse<any>(response, 'Erro ao desvincular veículo.');
+}
+
 
 export interface ConsultarPlacaResponse {
   retorno: number;
