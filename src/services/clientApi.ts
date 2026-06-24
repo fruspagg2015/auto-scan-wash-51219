@@ -531,5 +531,157 @@ export async function entregarVeiculoApi(idlavagem: number): Promise<void> {
   await handleResponse<any>(response, 'Erro ao confirmar entrega do veículo.');
 }
 
+export interface APIDashboardResumo {
+  carros_hoje: number;
+  tempo_medio: number;
+  receitas_hoje: number;
+  em_atendimento: number;
+}
 
+export interface APIDashboardPerformanceSemanal {
+  dia: string;
+  receita: number;
+  quantidade: number;
+}
+
+export interface APIDashboardDistribuicaoServico {
+  servico: string;
+  percentual: number;
+  quantidade: number;
+}
+
+export interface APIDashboardData {
+  resumo: APIDashboardResumo;
+  performance_semanal: APIDashboardPerformanceSemanal[];
+  cliente_ematendimento: {
+    lista: APIVehicleInService[];
+    paginacao: {
+      paginaatual: number;
+      totalpaginas: number;
+      totalregistro: number;
+    };
+  };
+  distribuicao_servicos: APIDashboardDistribuicaoServico[];
+}
+
+export interface DashboardResponse {
+  retorno: number;
+  msgerro: string;
+  payload: APIDashboardData;
+}
+
+/**
+ * Consulta os dados do dashboard utilizando o endpoint dashboardprincipal_listar.
+ */
+export async function getDashboardDataApi(): Promise<APIDashboardData> {
+  const { token, idsessao } = getAuthData();
+  const BASE_URL = import.meta.env.DEV ? '' : 'https://nexus.frconnect.com.br';
+  const url = `${BASE_URL}/carwash/v1/services/dashboardprincipal_listar`;
+
+  const payload = {
+    idsessao,
+    module: "lavajatonatal",
+    request: {
+      parameters: {}
+    }
+  };
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(payload)
+  });
+
+  const data = await handleResponse<DashboardResponse>(response, 'Erro ao carregar dados do dashboard.');
+  return data.payload;
+}
+export interface APIRelatoriosResumo {
+  tempo_medio: number;
+  ticket_medio: number;
+  carros_atendidos: number;
+  faturamento_total: number;
+}
+
+export interface APIRelatoriosTopCliente {
+  nome: string;
+  total: number;
+  atendimentos: number;
+}
+
+export interface APIRelatoriosVendaMensal {
+  mes: string;
+  total: number;
+}
+
+export interface APIRelatoriosRankingServico {
+  total: number;
+  descricao: string;
+}
+
+export interface APIRelatoriosPerformanceDiaria {
+  dia: string;
+  receita: number;
+  quantidade: number;
+}
+
+export interface APIRelatoriosAtendimentoMensal {
+  mes: string;
+  quantidade: number;
+}
+
+export interface APIRelatoriosServicoMaisVendido {
+  descricao: string;
+  quantidade: number;
+}
+
+export interface APIRelatoriosData {
+  resumo: APIRelatoriosResumo;
+  top_clientes: APIRelatoriosTopCliente[];
+  vendas_por_mes: APIRelatoriosVendaMensal[];
+  ranking_servicos: APIRelatoriosRankingServico[];
+  performance_diaria: APIRelatoriosPerformanceDiaria[];
+  atendimentos_mensais: APIRelatoriosAtendimentoMensal[];
+  servicos_mais_vendidos: APIRelatoriosServicoMaisVendido[];
+}
+
+export interface RelatoriosResponse {
+  retorno: number;
+  msgerro: string;
+  payload: APIRelatoriosData;
+}
+
+/**
+ * Consulta os dados de faturamento e vendas utilizando o endpoint dashboardvendas_listar.
+ */
+export async function getRelatoriosDataApi(datainicio: string, datafim: string): Promise<APIRelatoriosData> {
+  const { token, idsessao } = getAuthData();
+  const BASE_URL = import.meta.env.DEV ? '' : 'https://nexus.frconnect.com.br';
+  const url = `${BASE_URL}/carwash/v1/services/dashboardvendas_listar`;
+
+  const payload = {
+    idsessao,
+    module: "lavajatonatal",
+    request: {
+      parameters: {
+        datainicio,
+        datafim
+      }
+    }
+  };
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(payload)
+  });
+
+  const data = await handleResponse<RelatoriosResponse>(response, 'Erro ao carregar dados do relatório.');
+  return data.payload;
+}
 

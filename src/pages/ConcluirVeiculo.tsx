@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { listVehiclesInServiceApi, concluirVeiculoApi, APIVehicleInService } from "@/services/clientApi";
+import { listVehiclesInServiceApi, concluirVeiculoApi, APIVehicleInService, listServicesApi, BackendService } from "@/services/clientApi";
 import { atualizarStatusVeiculo } from "@/data/mockData";
 import { CheckCircle, Clock, Car, Loader2, User, Phone, DollarSign, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
@@ -12,15 +12,61 @@ export default function ConcluirVeiculo() {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [concluindoId, setConcluindoId] = useState<number | null>(null);
+  const [currentTime, setCurrentTime] = useState<Date>(new Date());
+  const [servicosReferencia, setServicosReferencia] = useState<BackendService[]>([]);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 10000); // Atualiza a cada 10 segundos
+    return () => clearInterval(timer);
+  }, []);
+
+  const getActualMinutes = (entradaStr: string): number => {
+    if (!entradaStr) return 0;
+    try {
+      const entradaDate = new Date(entradaStr);
+      if (isNaN(entradaDate.getTime())) return 0;
+      const diffMs = currentTime.getTime() - entradaDate.getTime();
+      return Math.max(0, Math.floor(diffMs / 60000));
+    } catch (e) {
+      return 0;
+    }
+  };
+
+  const formatDuration = (totalMinutes: number): string => {
+    const hours = Math.floor(totalMinutes / 60);
+    const mins = totalMinutes % 60;
+    if (hours > 0) {
+      return `${totalMinutes} min (${hours}h ${mins.toString().padStart(2, '0')}m)`;
+    }
+    return `${totalMinutes} min`;
+  };
+
+  const getTempoEstimado = (item: APIVehicleInService): number => {
+    if (!item.servicos || item.servicos.length === 0) return 0;
+    return item.servicos.reduce((total, s) => {
+      const refServico = servicosReferencia.find(ref => ref.idservico === s.idservico);
+      const tempo = refServico ? (refServico.tempoestimado || 0) : 0;
+      return total + (tempo * s.quantidade);
+    }, 0);
+  };
+
 
   const fetchVeiculos = async () => {
     try {
       setIsLoading(true);
       setError(null);
-      const data = await listVehiclesInServiceApi();
+      
+      const [veiculosData, servicosData] = await Promise.all([
+        listVehiclesInServiceApi(),
+        listServicesApi()
+      ]);
+      
+      setServicosReferencia(servicosData);
       
       // Filtrar apenas veículos que estão em atendimento (não finalizados ou entregues)
-      const emAndamento = data.filter(
+      const emAndamento = veiculosData.filter(
         (v) => v.status !== "completed" && v.status !== "delivered" && v.status !== "finalizado" && v.status !== "entregue"
       );
       setVeiculos(emAndamento);
@@ -188,13 +234,39 @@ export default function ConcluirVeiculo() {
                       <span className="font-medium ml-auto">{formatTime(item.entrada)}</span>
                     </div>
 
-                    {item.minutos > 0 && (
-                      <div className="flex items-center gap-2 text-sm text-foreground">
-                        <Clock className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                        <span className="text-muted-foreground">Tempo Decorrido:</span>
-                        <span className="font-medium ml-auto text-amber-600">{item.minutos} min</span>
-                      </div>
-                    )}
+                    {/* Cálculos de tempo do serviço */}
+                    {(() => {
+                      const tempoEstimadoCalculado = getTempoEstimado(item);
+                      const actualMinutes = getActualMinutes(item.entrada);
+                      const isDelayed = tempoEstimadoCalculado > 0 && actualMinutes > tempoEstimadoCalculado;
+
+                      return (
+                        <>
+                          {tempoEstimadoCalculado > 0 && (
+                            <div className="flex items-center gap-2 text-sm text-foreground">
+                              <Clock className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                              <span className="text-muted-foreground">Tempo Estimado:</span>
+                              <span className="font-medium ml-auto text-muted-foreground">{tempoEstimadoCalculado} min</span>
+                            </div>
+                          )}
+
+                          <div className="flex items-center gap-2 text-sm text-foreground">
+                            <Clock className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                            <span className="text-muted-foreground">Tempo Decorrido:</span>
+                            <span className={`font-semibold ml-auto flex items-center gap-1 ${
+                              isDelayed
+                                ? "text-red-500 font-bold animate-pulse"
+                                : "text-wash-blue"
+                            }`}>
+                              {isDelayed && (
+                                <AlertCircle className="h-3.5 w-3.5 text-red-500" />
+                              )}
+                              {formatDuration(actualMinutes)}
+                            </span>
+                          </div>
+                        </>
+                      );
+                    })()}
                   </div>
 
                   {item.servicos && item.servicos.length > 0 && (
