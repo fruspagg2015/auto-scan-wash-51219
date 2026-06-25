@@ -4,7 +4,6 @@ import {
   Camera, 
   Users, 
   Wrench, 
-  DollarSign, 
   BarChart3,
   Settings,
   ChevronDown,
@@ -51,7 +50,6 @@ const getMenuItems = (userRole: string) => {
   const cadastroItems = [
     { title: "Clientes", url: "/clientes", icon: Users, description: "Gerenciar clientes" },
     { title: "Serviços", url: "/servicos", icon: Wrench, description: "Configurar serviços" },
-    { title: "Preços", url: "/precos", icon: DollarSign, description: "Definir preços" },
   ];
 
   const configItems = [

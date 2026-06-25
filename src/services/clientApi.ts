@@ -685,3 +685,210 @@ export async function getRelatoriosDataApi(datainicio: string, datafim: string):
   return data.payload;
 }
 
+export interface CompanyConfig {
+  cnpj: string;
+  email: string;
+  telefone: string;
+  cep: string;
+  logradouro: string;
+  numero: string;
+  complemento: string;
+  cidade: string;
+  uf: string;
+  bairro: string;
+  nomeempresa: string | null;
+  descricao?: string;
+  codigo?: string;
+}
+
+export interface CompanyConfigResponse {
+  retorno: number;
+  msgerro: string;
+  payload: CompanyConfig | "";
+}
+
+/**
+ * Consulta os dados de configuração do módulo/empresa.
+ */
+export async function getCompanyConfigApi(): Promise<CompanyConfig | null> {
+  const { token, idsessao } = getAuthData();
+  const BASE_URL = import.meta.env.DEV ? '' : 'https://nexus.frconnect.com.br';
+  const url = `${BASE_URL}/carwash/v1/services/modulo_consultar`;
+
+  const payload = {
+    idsessao,
+    module: "lavajatonatal",
+    request: {
+      parameters: {}
+    }
+  };
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(payload)
+  });
+
+  const data = await handleResponse<CompanyConfigResponse>(response, 'Erro ao consultar configurações da empresa.');
+
+  if (!data.payload || typeof data.payload === 'string') {
+    return null;
+  }
+
+  return data.payload;
+}
+
+/**
+ * Salva as configurações do módulo/empresa.
+ */
+export async function saveCompanyConfigApi(configData: Partial<CompanyConfig>): Promise<void> {
+  const { token, idsessao } = getAuthData();
+  const BASE_URL = import.meta.env.DEV ? '' : 'https://nexus.frconnect.com.br';
+  const url = `${BASE_URL}/carwash/v1/services/modulo_salvar`;
+
+  const payload = {
+    idsessao,
+    module: "lavajatonatal",
+    request: {
+      parameters: {
+        cnpj: configData.cnpj || '',
+        email: configData.email || '',
+        telefone: configData.telefone || '',
+        cep: configData.cep || '',
+        logradouro: configData.logradouro || '',
+        numero: configData.numero || '',
+        complemento: configData.complemento || '',
+        cidade: configData.cidade || '',
+        uf: configData.uf || '',
+        bairro: configData.bairro || '',
+        nomeempresa: configData.nomeempresa || ''
+      }
+    }
+  };
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(payload)
+  });
+
+  await handleResponse<{ retorno: number; msgerro: string; payload: any }>(response, 'Erro ao salvar configurações da empresa.');
+}
+
+export interface BackendUser {
+  idusuario: number;
+  nomeusuario: string;
+  email: string;
+  status: boolean;
+  idperfil: number;
+  nomeperfil: string;
+  telefone: string;
+  datacadastro: string;
+  registro: string;
+  ultimologin: string;
+  dataexclusao: string;
+}
+
+export interface UserListResponse {
+  retorno: number;
+  msgerro: string;
+  payload: {
+    lista: BackendUser[];
+    paginacao: {
+      paginaatual: number;
+      totalregistro: number;
+    };
+  } | "";
+}
+
+/**
+ * Lista os usuários utilizando o endpoint carwash usuario_listar.
+ */
+export async function listUsersApi(): Promise<BackendUser[]> {
+  const { token, idsessao } = getAuthData();
+  const BASE_URL = import.meta.env.DEV ? '' : 'https://nexus.frconnect.com.br';
+  const url = `${BASE_URL}/carwash/v1/services/usuario_listar`;
+
+  const payload = {
+    idsessao,
+    module: "lavajatonatal",
+    request: {
+      parameters: {
+        filter: {},
+        paginacao: {
+          enabled: true,
+          atual: 1,
+          total: 100
+        }
+      }
+    }
+  };
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(payload)
+  });
+
+  const data = await handleResponse<UserListResponse>(response, 'Erro ao listar usuários.');
+
+  if (!data.payload || typeof data.payload === 'string') {
+    return [];
+  }
+
+  return data.payload.lista || [];
+}
+
+export interface UserSavePayload {
+  idusuario?: number;
+  nomeusuario: string;
+  email: string;
+  telefone?: string;
+  status: boolean;
+  idperfil: number;
+}
+
+export interface UserSaveResponse {
+  retorno: number;
+  msgerro: string;
+  payload: any;
+}
+
+/**
+ * Salva ou atualiza um usuário no novo endpoint da API.
+ */
+export async function saveUserApi(userData: UserSavePayload): Promise<void> {
+  const { token, idsessao } = getAuthData();
+  const BASE_URL = import.meta.env.DEV ? '' : 'https://nexus.frconnect.com.br';
+  const url = `${BASE_URL}/carwash/v1/services/usuario_salvar`;
+
+  const payload = {
+    idsessao,
+    module: "lavajatonatal",
+    request: {
+      parameters: userData
+    }
+  };
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(payload)
+  });
+
+  await handleResponse<UserSaveResponse>(response, 'Erro ao salvar usuário.');
+}
+
+
