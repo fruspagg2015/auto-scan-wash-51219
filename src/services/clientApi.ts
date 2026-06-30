@@ -891,4 +891,97 @@ export async function saveUserApi(userData: UserSavePayload): Promise<void> {
   await handleResponse<UserSaveResponse>(response, 'Erro ao salvar usuário.');
 }
 
+export interface ZapMessage {
+  idmensagem?: number;
+  codigo: string;
+  titulo: string;
+  texto: string;
+}
+
+export interface ZapMessageListResponse {
+  retorno: number;
+  msgerro: string;
+  payload: ZapMessage[];
+}
+
+/**
+ * Lista as mensagens de WhatsApp automáticas.
+ */
+export async function listZapMessagesApi(): Promise<ZapMessage[]> {
+  const { token, idsessao } = getAuthData();
+  const BASE_URL = import.meta.env.DEV ? '' : 'https://nexus.frconnect.com.br';
+  const url = `${BASE_URL}/carwash/v1/services/mensagemzap_listar`;
+
+  const payload = {
+    idsessao,
+    module: "lavajatonatal",
+    request: {
+      parameters: {}
+    }
+  };
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(payload)
+  });
+
+  const data = await handleResponse<ZapMessageListResponse>(response, 'Erro ao listar mensagens automáticas.');
+  return data.payload || [];
+}
+
+/**
+ * Salva/atualiza uma mensagem de WhatsApp automática.
+ */
+export async function saveZapMessageApi(messageData: ZapMessage): Promise<void> {
+  const { token, idsessao } = getAuthData();
+  const BASE_URL = import.meta.env.DEV ? '' : 'https://nexus.frconnect.com.br';
+  const url = `${BASE_URL}/carwash/v1/services/mensagemzap_salvar`;
+
+  // Mapeia o idmensagem caso não tenha vindo da listagem (fallback de segurança)
+  let idmensagem = messageData.idmensagem;
+  if (!idmensagem) {
+    switch (messageData.codigo) {
+      case 'boasvindas':
+        idmensagem = 1;
+        break;
+      case 'veiculopronto':
+        idmensagem = 2;
+        break;
+      case 'obrigadopelapreferencia':
+        idmensagem = 3;
+        break;
+      default:
+        idmensagem = 0;
+    }
+  }
+
+  const payload = {
+    idsessao,
+    module: "lavajatonatal",
+    request: {
+      parameters: {
+        idmensagem,
+        titulo: messageData.titulo,
+        texto: messageData.texto
+      }
+    }
+  };
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(payload)
+  });
+
+  await handleResponse<any>(response, 'Erro ao salvar mensagem automática.');
+}
+
+
 
