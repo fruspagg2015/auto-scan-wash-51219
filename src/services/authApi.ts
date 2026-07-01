@@ -19,6 +19,25 @@ export interface ApiLoginResponse {
 }
 
 /**
+ * Obtém o IP público do cliente de forma assíncrona com timeout de 1.5 segundos.
+ */
+async function getClientIp(): Promise<string> {
+  try {
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), 1500);
+    const response = await fetch('https://api.ipify.org?format=json', { signal: controller.signal });
+    clearTimeout(id);
+    if (response.ok) {
+      const data = await response.json();
+      return data.ip || '';
+    }
+  } catch (error) {
+    console.warn("Não foi possível recuperar o IP do cliente:", error);
+  }
+  return '';
+}
+
+/**
  * Realiza o login do usuário utilizando a nova API.
  * @param username E-mail/usuário
  * @param password Senha em texto puro (será codificada em base64)
@@ -30,12 +49,16 @@ export async function signInApi(username: string, password: string): Promise<Api
   // Codifica a senha em Base64
   const base64Password = btoa(password);
 
+  // Busca o IP do cliente
+  const clientIp = await getClientIp();
+
   const payload = {
     module: "lavajatonatal",
     request: {
       parameters: {
         username: username,
-        password: base64Password
+        password: base64Password,
+        ip: clientIp
       }
     }
   };

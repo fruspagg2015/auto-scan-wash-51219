@@ -148,8 +148,7 @@ const VehicleTimer = ({ entrada, minutos }: { entrada?: string; minutos?: number
     </span>
   );
 };
-
-const VehicleCard = ({ 
+const VehicleCard = ({ 
   vehicle, 
   navigate,
   getStatusBadge
@@ -159,14 +158,15 @@ const VehicleCard = ({
   getStatusBadge: (status: string) => React.ReactNode;
 }) => {
   return (
-    <Card className="border border-border/60 shadow-sm hover:shadow-md transition-shadow duration-200 h-full flex flex-col justify-between min-h-[220px]">
-      <CardContent className="p-4 flex flex-col justify-between h-full">
+    <Card className="border border-border/80 shadow-md hover:shadow-xl hover:-translate-y-1 bg-gradient-to-br from-white to-slate-50/40 dark:from-slate-900 dark:to-slate-950/40 transition-all duration-300 h-full flex flex-col justify-between min-h-[220px] overflow-hidden relative group">
+      <div className="absolute top-0 left-0 w-1 h-full bg-wash-blue/80 group-hover:bg-wash-blue transition-colors duration-300" />
+      <CardContent className="p-5 flex flex-col justify-between h-full">
         <div>
           {/* Top Header Row */}
           <div className="flex items-start justify-between mb-3 gap-2">
             <div>
               <div className="flex flex-wrap items-center gap-2 mb-1">
-                <span className="font-mono font-bold text-base tracking-wider bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 px-2 py-0.5 rounded border border-slate-300 dark:border-slate-700 shadow-sm whitespace-nowrap">
+                <span className="font-mono font-bold text-base tracking-wider bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 px-2 py-0.5 rounded border border-slate-300 dark:border-slate-700 shadow-sm whitespace-nowrap group-hover:border-wash-blue/30 transition-colors duration-300">
                   {vehicle.placa}
                 </span>
                 {vehicle.tipoAtendimento === 'agendado' && (
@@ -177,7 +177,7 @@ const VehicleCard = ({
                 )}
               </div>
               <div className="text-sm font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-1.5 mt-2">
-                <Car className="h-4 w-4 text-slate-500 flex-shrink-0" />
+                <Car className="h-4 w-4 text-slate-500 flex-shrink-0 group-hover:text-wash-blue transition-colors duration-300" />
                 <span className="truncate max-w-[150px]">{vehicle.modelo}</span>
                 {vehicle.cor && (
                   <span className="text-xs font-normal text-muted-foreground whitespace-nowrap">
@@ -190,28 +190,28 @@ const VehicleCard = ({
             {/* Dropdown Actions */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="sm" className="h-8 w-8 p-0 flex-shrink-0">
+                <Button variant="ghost" size="sm" className="h-8 w-8 p-0 flex-shrink-0 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full">
                   <MoreHorizontal className="h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="bg-white z-50">
-                <DropdownMenuItem onClick={() => navigate("/vehicle-details", { state: vehicle })}>
+              <DropdownMenuContent align="end" className="bg-white dark:bg-slate-900 border border-border/80 z-50">
+                <DropdownMenuItem onClick={() => navigate("/vehicle-details", { state: vehicle })} className="cursor-pointer">
                   Ver Detalhes
                 </DropdownMenuItem>
-                <DropdownMenuItem>Finalizar</DropdownMenuItem>
-                <DropdownMenuItem className="text-red-600">Cancelar</DropdownMenuItem>
+                <DropdownMenuItem className="cursor-pointer">Finalizar</DropdownMenuItem>
+                <DropdownMenuItem className="text-red-600 cursor-pointer">Cancelar</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
-
+ 
           {/* Services List Tag style */}
           <div className="mb-4">
-            <div className="text-xs text-muted-foreground mb-1.5 font-medium">Serviços:</div>
+            <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Serviços:</div>
             <div className="flex flex-wrap gap-1">
               {vehicle.servico.split(',').map((serv, index) => (
                 <span 
                   key={index}
-                  className="text-xs font-medium bg-wash-blue/10 text-wash-blue px-2 py-0.5 rounded-full border border-wash-blue/20"
+                  className="text-[11px] font-semibold bg-wash-blue/10 text-wash-blue px-2.5 py-0.5 rounded-full border border-wash-blue/10 shadow-sm"
                 >
                   {serv.trim()}
                 </span>
@@ -219,9 +219,9 @@ const VehicleCard = ({
             </div>
           </div>
         </div>
-
+ 
         {/* Footer Info Row */}
-        <div className="border-t border-slate-100 dark:border-slate-800 pt-3 mt-auto space-y-2">
+        <div className="border-t border-slate-100 dark:border-slate-800/80 pt-3 mt-auto space-y-2">
           <div className="flex items-center justify-between text-xs">
             <div className="flex items-center gap-1 text-muted-foreground">
               <Clock className="h-3.5 w-3.5" />
@@ -229,7 +229,7 @@ const VehicleCard = ({
             </div>
             {getStatusBadge(vehicle.status)}
           </div>
-
+ 
           <div className="flex items-center justify-between text-xs">
             <div className="flex items-center gap-1 text-muted-foreground">
               <Clock className="h-3.5 w-3.5" />
@@ -237,9 +237,9 @@ const VehicleCard = ({
             </div>
             <span className="font-semibold text-slate-700 dark:text-slate-200">{vehicle.horaChegada}</span>
           </div>
-
+ 
           {vehicle.minutos !== undefined && vehicle.minutos > 0 ? (
-            <div className="flex items-center justify-between text-xs bg-slate-50 dark:bg-slate-800/50 p-1.5 rounded">
+            <div className="flex items-center justify-between text-xs bg-slate-50 dark:bg-slate-800/50 p-2 rounded-lg border border-slate-100 dark:border-slate-800/40">
               <div className="flex items-center gap-1 text-slate-600 dark:text-slate-300">
                 <Clock className="h-3.5 w-3.5 text-amber-500" />
                 <span>Tempo restante:</span>
@@ -247,7 +247,7 @@ const VehicleCard = ({
               <VehicleTimer entrada={vehicle.entrada} minutos={vehicle.minutos} />
             </div>
           ) : vehicle.tempoEstimado !== "-" ? (
-            <div className="flex items-center justify-between text-xs bg-slate-50 dark:bg-slate-800/50 p-1.5 rounded">
+            <div className="flex items-center justify-between text-xs bg-slate-50 dark:bg-slate-800/50 p-2 rounded-lg border border-slate-100 dark:border-slate-800/40">
               <div className="flex items-center gap-1 text-slate-600 dark:text-slate-300">
                 <Clock className="h-3.5 w-3.5 text-amber-500" />
                 <span>Tempo estimado:</span>
@@ -291,11 +291,16 @@ const Dashboard = () => {
     : [];
 
   const colors = [
-    "hsl(var(--wash-blue))",
-    "hsl(var(--wash-green))",
-    "hsl(var(--wash-blue-light))",
-    "hsl(var(--accent))",
-    "hsl(var(--warning))"
+    "#3b82f6", // Azul vibrante
+    "#10b981", // Verde esmeralda
+    "#f59e0b", // Âmbar/Amarelo
+    "#8b5cf6", // Roxo elétrico
+    "#ec4899", // Rosa brilhante
+    "#06b6d4", // Ciano tecnológico
+    "#f97316", // Laranja energia
+    "#14b8a6", // Turquesa
+    "#6366f1", // Índigo
+    "#a855f7", // Violeta
   ];
 
   const pieChartData = dashboardData
@@ -431,62 +436,74 @@ const Dashboard = () => {
       <div className="max-w-7xl mx-auto space-y-6">
         {/* KPI Cards */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
-          <Card className="shadow-wash">
-            <CardContent className="p-3 sm:p-6">
+          <Card className="shadow-md hover:shadow-xl hover:-translate-y-1 transition-all duration-300 border border-wash-blue/10 bg-gradient-to-br from-white to-blue-50/20 dark:from-slate-900 dark:to-blue-950/20 overflow-hidden relative group">
+            <div className="absolute top-0 right-0 w-24 h-24 bg-wash-blue/5 rounded-full blur-xl -mr-6 -mt-6 group-hover:bg-wash-blue/10 transition-colors duration-500" />
+            <CardContent className="p-3 sm:p-6 relative z-10">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs sm:text-sm text-muted-foreground">Carros Hoje</p>
-                  <h3 className="text-2xl sm:text-3xl font-bold text-wash-blue">
+                  <p className="text-[11px] sm:text-xs font-semibold text-muted-foreground uppercase tracking-wider">Carros Hoje</p>
+                  <h3 className="text-2xl sm:text-3xl font-extrabold text-wash-blue mt-1">
                     {isLoading ? "..." : dashboardData?.resumo.carros_hoje ?? 0}
                   </h3>
-                  <p className="text-xs text-wash-green mt-1">Total hoje</p>
+                  <p className="text-[10px] sm:text-xs text-wash-green font-semibold mt-1">Total hoje</p>
                 </div>
-                <Car className="h-6 w-6 sm:h-8 sm:w-8 text-wash-blue/60" />
+                <div className="p-2 sm:p-3 bg-wash-blue/10 rounded-xl text-wash-blue group-hover:scale-110 transition-transform duration-300">
+                  <Car className="h-5 w-5 sm:h-6 sm:w-6" />
+                </div>
               </div>
             </CardContent>
           </Card>
 
-          <Card className="shadow-wash">
-            <CardContent className="p-3 sm:p-6">
+          <Card className="shadow-md hover:shadow-xl hover:-translate-y-1 transition-all duration-300 border border-wash-green/10 bg-gradient-to-br from-white to-green-50/20 dark:from-slate-900 dark:to-green-950/20 overflow-hidden relative group">
+            <div className="absolute top-0 right-0 w-24 h-24 bg-wash-green/5 rounded-full blur-xl -mr-6 -mt-6 group-hover:bg-wash-green/10 transition-colors duration-500" />
+            <CardContent className="p-3 sm:p-6 relative z-10">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs sm:text-sm text-muted-foreground">Receita Hoje</p>
-                  <h3 className="text-2xl sm:text-3xl font-bold text-wash-green">
+                  <p className="text-[11px] sm:text-xs font-semibold text-muted-foreground uppercase tracking-wider">Receita Hoje</p>
+                  <h3 className="text-2xl sm:text-3xl font-extrabold text-wash-green mt-1">
                     {isLoading ? "..." : `R$ ${dashboardData?.resumo.receitas_hoje ?? 0}`}
                   </h3>
-                  <p className="text-xs text-wash-green mt-1">Total faturado</p>
+                  <p className="text-[10px] sm:text-xs text-wash-green font-semibold mt-1">Total faturado</p>
                 </div>
-                <DollarSign className="h-6 w-6 sm:h-8 sm:w-8 text-wash-green/60" />
+                <div className="p-2 sm:p-3 bg-wash-green/10 rounded-xl text-wash-green group-hover:scale-110 transition-transform duration-300">
+                  <DollarSign className="h-5 w-5 sm:h-6 sm:w-6" />
+                </div>
               </div>
             </CardContent>
           </Card>
 
-          <Card className="shadow-wash">
-            <CardContent className="p-3 sm:p-6">
+          <Card className="shadow-md hover:shadow-xl hover:-translate-y-1 transition-all duration-300 border border-amber-500/10 bg-gradient-to-br from-white to-amber-50/20 dark:from-slate-900 dark:to-amber-950/20 overflow-hidden relative group">
+            <div className="absolute top-0 right-0 w-24 h-24 bg-amber-500/5 rounded-full blur-xl -mr-6 -mt-6 group-hover:bg-amber-500/10 transition-colors duration-500" />
+            <CardContent className="p-3 sm:p-6 relative z-10">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs sm:text-sm text-muted-foreground">Em Atendimento</p>
-                  <h3 className="text-2xl sm:text-3xl font-bold text-amber-600">
+                  <p className="text-[11px] sm:text-xs font-semibold text-muted-foreground uppercase tracking-wider">Em Atendimento</p>
+                  <h3 className="text-2xl sm:text-3xl font-extrabold text-amber-600 mt-1">
                     {isLoading ? "..." : dashboardData?.resumo.em_atendimento ?? 0}
                   </h3>
-                  <p className="text-xs text-muted-foreground mt-1">Veículos ativos</p>
+                  <p className="text-[10px] sm:text-xs text-muted-foreground font-semibold mt-1">Veículos ativos</p>
                 </div>
-                <Clock className="h-6 w-6 sm:h-8 sm:w-8 text-amber-600/60" />
+                <div className="p-2 sm:p-3 bg-amber-500/10 rounded-xl text-amber-600 group-hover:scale-110 transition-transform duration-300">
+                  <Clock className="h-5 w-5 sm:h-6 sm:w-6" />
+                </div>
               </div>
             </CardContent>
           </Card>
 
-          <Card className="shadow-wash">
-            <CardContent className="p-3 sm:p-6">
+          <Card className="shadow-md hover:shadow-xl hover:-translate-y-1 transition-all duration-300 border border-wash-blue/10 bg-gradient-to-br from-white to-blue-50/20 dark:from-slate-900 dark:to-blue-950/20 overflow-hidden relative group">
+            <div className="absolute top-0 right-0 w-24 h-24 bg-wash-blue/5 rounded-full blur-xl -mr-6 -mt-6 group-hover:bg-wash-blue/10 transition-colors duration-500" />
+            <CardContent className="p-3 sm:p-6 relative z-10">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-xs sm:text-sm text-muted-foreground">Tempo Médio</p>
-                  <h3 className="text-2xl sm:text-3xl font-bold text-wash-blue">
+                  <p className="text-[11px] sm:text-xs font-semibold text-muted-foreground uppercase tracking-wider">Tempo Médio</p>
+                  <h3 className="text-2xl sm:text-3xl font-extrabold text-wash-blue mt-1">
                     {isLoading ? "..." : `${dashboardData?.resumo.tempo_medio ? Math.round(dashboardData.resumo.tempo_medio) : 0}min`}
                   </h3>
-                  <p className="text-xs text-wash-green mt-1">Tempo médio por veículo</p>
+                  <p className="text-[10px] sm:text-xs text-wash-green font-semibold mt-1">Tempo médio/veículo</p>
                 </div>
-                <TrendingUp className="h-6 w-6 sm:h-8 sm:w-8 text-wash-blue/60" />
+                <div className="p-2 sm:p-3 bg-wash-blue/10 rounded-xl text-wash-blue group-hover:scale-110 transition-transform duration-300">
+                  <TrendingUp className="h-5 w-5 sm:h-6 sm:w-6" />
+                </div>
               </div>
             </CardContent>
           </Card>
