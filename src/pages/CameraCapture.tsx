@@ -100,6 +100,7 @@ const CameraCapture = () => {
 
       const response = await consultarPlacaApi(manualPlate);
       const placaData = response.payload;
+      console.log("CameraCapture placa_consultar response payload:", placaData);
 
       const vehicleData = {
         placa: placaData.placa || manualPlate,
@@ -121,7 +122,7 @@ const CameraCapture = () => {
           cadastrado: true
         } : null,
         fonte: "api",
-        idplaca: placaData.idveiculo,
+        idplaca: placaData.idveiculo || placaData.idplaca || placaData.id || 0,
         status: placaData.status,
       };
 

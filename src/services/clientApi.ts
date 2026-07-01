@@ -8,6 +8,7 @@ export interface ClientVehicle {
 
 export interface BackendClient {
   id: number;
+  idcliente?: number;
   nome: string;
   telefone: string;
   telefoneformatado?: string;
@@ -22,6 +23,7 @@ export interface BackendClient {
   numero?: string;
   idcidade?: number;
   idbairro?: number;
+  uf?: string;
   veiculos?: ClientVehicle[];
 }
 
@@ -135,6 +137,49 @@ export async function listClientsApi(nomeFilter: string = ""): Promise<BackendCl
   });
 
   const data = await handleResponse<ClientListResponse>(response, 'Erro ao listar clientes.');
+
+  if (!data.payload || typeof data.payload === 'string') {
+    return [];
+  }
+
+  return data.payload.lista || [];
+}
+
+/**
+ * Busca clientes utilizando o endpoint cliente_listar filtrando por telefone.
+ */
+export async function searchClientByPhoneApi(phoneFilter: string): Promise<BackendClient[]> {
+  const { token, idsessao } = getAuthData();
+  const BASE_URL = import.meta.env.DEV ? '' : 'https://nexus.frconnect.com.br';
+  const url = `${BASE_URL}/carwash/v1/services/cliente_listar`;
+
+  const payload = {
+    idsessao,
+    module: "lavajatonatal",
+    request: {
+      parameters: {
+        filter: {
+          telefone: phoneFilter
+        },
+        paginacao: {
+          enabled: false,
+          atual: 1,
+          total: 10
+        }
+      }
+    }
+  };
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(payload)
+  });
+
+  const data = await handleResponse<ClientListResponse>(response, 'Erro ao buscar cliente por telefone.');
 
   if (!data.payload || typeof data.payload === 'string') {
     return [];
@@ -472,9 +517,41 @@ export async function concluirVeiculoApi(idlavagem: number): Promise<void> {
 }
 
 /**
- * Lista os veículos prontos para entrega utilizando o endpoint veiculo_entregar_listar.
+ * Interfaces para o payload de entrega agrupado por cliente.
  */
-export async function listVehiclesToDeliverApi(): Promise<APIVehicleInService[]> {
+export interface DeliveryVehicleService {
+  idservico?: number;
+  nome: string;
+  quantidade?: number;
+  valor: number;
+}
+
+export interface DeliveryVehicle {
+  idveiculo: number;
+  idlavagem?: number; // Identificador da lavagem associada a este veículo
+  placa: string;
+  modelo: string;
+  marca: string;
+  cor?: string;
+  servicos: DeliveryVehicleService[];
+  valor: number;
+}
+
+export interface DeliveryClient {
+  idcliente: number;
+  cliente: {
+    nome: string;
+    telefone: string;
+  };
+  veiculos: DeliveryVehicle[];
+  totalapagar: number;
+}
+
+/**
+ * Lista os veículos prontos para entrega utilizando o endpoint veiculo_entregar_listar.
+ * O payload retorna agrupado por cliente.
+ */
+export async function listVehiclesToDeliverApi(): Promise<DeliveryClient[]> {
   const { token, idsessao } = getAuthData();
   const BASE_URL = import.meta.env.DEV ? '' : 'https://nexus.frconnect.com.br';
   const url = `${BASE_URL}/carwash/v1/services/veiculo_entregar_listar`;
@@ -503,8 +580,9 @@ export async function listVehiclesToDeliverApi(): Promise<APIVehicleInService[]>
 
 /**
  * Confirma a entrega do veículo utilizando o endpoint veiculo_entregar.
+ * Aceita um ID de lavagem individual ou um array de IDs de lavagem.
  */
-export async function entregarVeiculoApi(idlavagem: number): Promise<void> {
+export async function entregarVeiculoApi(idlavagem: number | number[]): Promise<void> {
   const { token, idsessao } = getAuthData();
   const BASE_URL = import.meta.env.DEV ? '' : 'https://nexus.frconnect.com.br';
   const url = `${BASE_URL}/carwash/v1/services/veiculo_entregar`;
@@ -514,7 +592,7 @@ export async function entregarVeiculoApi(idlavagem: number): Promise<void> {
     module: "lavajatonatal",
     request: {
       parameters: {
-        idlavagem
+        idlavagem: Array.isArray(idlavagem) ? idlavagem : [idlavagem]
       }
     }
   };

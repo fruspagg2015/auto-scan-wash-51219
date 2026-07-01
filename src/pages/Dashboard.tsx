@@ -364,7 +364,7 @@ const Dashboard = () => {
               tipoAtendimento: 'fila',
               entrada: order.entrada,
               minutos: totalMinutesFromRegistry,
-              idplaca: order.veiculo?.idveiculo,
+              idplaca: order.veiculo?.idveiculo || order.veiculo?.idplaca || order.veiculo?.id || 0,
               cliente: order.cliente ? {
                 id: order.cliente.idcliente || (order.cliente as any).id || 0,
                 idcliente: order.cliente.idcliente || (order.cliente as any).id || 0,

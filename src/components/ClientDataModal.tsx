@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "@/hooks/use-toast";
-import { saveClientApi } from "@/services/clientApi";
+import { saveClientApi, searchClientByPhoneApi } from "@/services/clientApi";
 
 interface ClientDataModalProps {
   isOpen: boolean;
@@ -45,6 +45,10 @@ export const ClientDataModal: React.FC<ClientDataModalProps> = ({
   vehicleData
 }) => {
   const { currentCompanyId } = useAuth();
+  const [resolvedClientId, setResolvedClientId] = useState<number | null>(null);
+  const [resolvedVeiculoId, setResolvedVeiculoId] = useState<number | null>(null);
+  const [isSearchingPhone, setIsSearchingPhone] = useState(false);
+
   const [formData, setFormData] = useState({
     nome: vehicleData?.cliente?.nome || "",
     telefone: vehicleData?.cliente?.telefone ? formatPhone(vehicleData.cliente.telefone) : "",
@@ -127,15 +131,16 @@ export const ClientDataModal: React.FC<ClientDataModalProps> = ({
         status: true
       };
 
-      // Adicionar idcliente se for atualização
-      if (vehicleData?.cliente?.id) {
-        payload.idcliente = vehicleData.cliente.id;
+      // Adicionar idcliente se for atualização ou resolvido por telefone
+      const finalClientId = resolvedClientId || vehicleData?.cliente?.id || (vehicleData?.cliente as any)?.idcliente;
+      if (finalClientId) {
+        payload.idcliente = finalClientId;
       }
 
-      // Adicionar idveiculo se houver
-      if (vehicleData?.idplaca) {
-        payload.idveiculo = vehicleData.idplaca;
-        payload["idveiculo:"] = vehicleData.idplaca; // Para cobrir o typo do JSON de exemplo
+      // O idveiculo da consulta de placa tem prioridade absoluta
+      let finalVeiculoId = vehicleData?.idplaca || resolvedVeiculoId;
+      if (finalVeiculoId) {
+        payload.idveiculo = finalVeiculoId;
       }
 
       // Envia para o novo endpoint da API
@@ -143,12 +148,18 @@ export const ClientDataModal: React.FC<ClientDataModalProps> = ({
       console.log("ClientDataModal saveClientApi resultPayload:", resultPayload);
       console.log("ClientDataModal current vehicleData:", vehicleData);
       
-      const clienteId = (resultPayload as any)?.idcliente || (resultPayload as any)?.id || vehicleData?.cliente?.id || (vehicleData?.cliente as any)?.idcliente || 0;
+      // Se a API de salvamento retornar um idveiculo, usar apenas se não tínhamos um ainda
+      if (!finalVeiculoId) {
+        finalVeiculoId = (resultPayload as any)?.idveiculo || 0;
+      }
+
+      const clienteId = (resultPayload as any)?.idcliente || (resultPayload as any)?.id || finalClientId || 0;
       console.log("ClientDataModal resolved clienteId:", clienteId);
 
       // 3. Retornar dados completos
       const completeData = {
         ...vehicleData,
+        idplaca: finalVeiculoId,
         modelo: vehicleData?.modelo || formData.modelo,
         marca: vehicleData?.marca || formData.marca,
         ano: vehicleData?.ano || formData.ano,
@@ -183,9 +194,66 @@ export const ClientDataModal: React.FC<ClientDataModalProps> = ({
 
 
 
+  const handlePhoneQuery = async (phoneStr: string) => {
+    const cleanPhone = phoneStr.replace(/\D/g, '');
+    if (cleanPhone.length < 10) return;
+
+    let formattedPhone = cleanPhone;
+    if (formattedPhone.length === 10 || formattedPhone.length === 11) {
+      formattedPhone = '55' + formattedPhone;
+    }
+
+    setIsSearchingPhone(true);
+    try {
+      const results = await searchClientByPhoneApi(formattedPhone);
+      if (results && results.length > 0) {
+        const client = results[0];
+        
+        // Procurar o veículo que corresponde à placa consultada
+        const matchedVehicle = client.veiculos?.find((v: any) => v.placa === vehicleData?.placa);
+
+        setFormData(prev => ({
+          ...prev,
+          nome: client.nome,
+          email: client.email || '',
+        }));
+
+        setResolvedClientId(client.idcliente || client.id || null);
+
+        // Só setar o resolvedVeiculoId se a placa consultada não tiver retornado um idveiculo
+        if (!vehicleData?.idplaca && matchedVehicle) {
+          setResolvedVeiculoId(matchedVehicle.idveiculo);
+        }
+
+        toast({
+          title: "Cliente encontrado!",
+          description: `Nome: ${client.nome}`,
+        });
+      }
+    } catch (err) {
+      console.error("Erro ao buscar cliente pelo telefone:", err);
+    } finally {
+      setIsSearchingPhone(false);
+    }
+  };
+
   const handlePhoneChange = (value: string) => {
     const formatted = formatPhone(value);
     handleInputChange('telefone', formatted);
+    setResolvedClientId(null); // Reset when phone changes
+    // Só resetar veículo se não tiver idplaca da consulta de placa
+    if (!vehicleData?.idplaca) {
+      setResolvedVeiculoId(null);
+    }
+
+    const cleanPhone = formatted.replace(/\D/g, '');
+    if (cleanPhone.length === 11) {
+      handlePhoneQuery(formatted);
+    }
+  };
+
+  const handlePhoneBlur = () => {
+    handlePhoneQuery(formData.telefone);
   };
 
   return (
@@ -234,8 +302,26 @@ export const ClientDataModal: React.FC<ClientDataModalProps> = ({
               <User className="h-4 w-4" />
               Dados do Cliente
             </h3>
-            
             <div className="space-y-3">
+              <div>
+                <Label htmlFor="telefone">Telefone *</Label>
+                <div className="relative">
+                  <Input
+                    id="telefone"
+                    placeholder="(84) 99999-9999"
+                    value={formData.telefone}
+                    onChange={(e) => handlePhoneChange(e.target.value)}
+                    onBlur={handlePhoneBlur}
+                    className={errors.telefone ? 'border-destructive pr-10' : 'pr-10'}
+                    disabled={isSearchingPhone}
+                  />
+                  {isSearchingPhone && (
+                    <Loader2 className="absolute right-3 top-2.5 h-4 w-4 animate-spin text-muted-foreground" />
+                  )}
+                </div>
+                {errors.telefone && <p className="text-xs text-destructive mt-1">{errors.telefone}</p>}
+              </div>
+
               <div>
                 <Label htmlFor="nome">Nome completo *</Label>
                 <Input
@@ -246,18 +332,6 @@ export const ClientDataModal: React.FC<ClientDataModalProps> = ({
                   className={errors.nome ? 'border-destructive' : ''}
                 />
                 {errors.nome && <p className="text-xs text-destructive mt-1">{errors.nome}</p>}
-              </div>
-
-              <div>
-                <Label htmlFor="telefone">Telefone *</Label>
-                <Input
-                  id="telefone"
-                  placeholder="(11) 99999-9999"
-                  value={formData.telefone}
-                  onChange={(e) => handlePhoneChange(e.target.value)}
-                  className={errors.telefone ? 'border-destructive' : ''}
-                />
-                {errors.telefone && <p className="text-xs text-destructive mt-1">{errors.telefone}</p>}
               </div>
 
               <div>

@@ -4,9 +4,9 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Separator } from "@/components/ui/separator"
-import { CheckCircle, QrCode, Car, User, Phone, DollarSign, Clock, Loader2, AlertCircle } from "lucide-react"
+import { CheckCircle, QrCode, Car, User, Phone, DollarSign, Loader2, AlertCircle, ChevronDown, ChevronUp } from "lucide-react"
 import { atualizarStatusVeiculo } from "@/data/mockData"
-import { listVehiclesToDeliverApi, entregarVeiculoApi, APIVehicleInService } from "@/services/clientApi"
+import { listVehiclesToDeliverApi, entregarVeiculoApi, DeliveryClient, DeliveryVehicle } from "@/services/clientApi"
 import { toast } from "@/hooks/use-toast"
 
 // Mock QR Code component
@@ -29,28 +29,31 @@ const PaymentSuccess = () => (
     <p className="text-lg font-semibold text-green-800 mb-2">Pagamento Confirmado!</p>
     <p className="text-sm text-green-600 text-center">
       O pagamento foi processado com sucesso.<br />
-      Veículo pronto para entrega.
+      Veículos prontos para entrega.
     </p>
   </div>
 )
 
 export default function EntregarVeiculo() {
-  const [veiculos, setVeiculos] = useState<APIVehicleInService[]>([])
+  const [clientes, setClientes] = useState<DeliveryClient[]>([])
   const [isLoading, setIsLoading] = useState<boolean>(true)
   const [error, setError] = useState<string | null>(null)
-  const [selectedVehicle, setSelectedVehicle] = useState<APIVehicleInService | null>(null)
+  const [selectedClient, setSelectedClient] = useState<DeliveryClient | null>(null)
   const [paymentStatus, setPaymentStatus] = useState<'pending' | 'processing' | 'success'>('pending')
   const [isPaymentDialogOpen, setIsPaymentDialogOpen] = useState(false)
   const [isDelivering, setIsDelivering] = useState<boolean>(false)
+  const [expandedClients, setExpandedClients] = useState<Set<number>>(new Set())
 
-  const fetchVeiculos = async () => {
+  const fetchClientes = async () => {
     try {
       setIsLoading(true)
       setError(null)
       const data = await listVehiclesToDeliverApi()
-      setVeiculos(data)
+      setClientes(data)
+      // Expandir todos por padrão
+      setExpandedClients(new Set(data.map(c => c.idcliente)))
     } catch (err: any) {
-      console.error("Erro ao buscar veículos prontos para entrega:", err)
+      console.error("Erro ao buscar clientes prontos para entrega:", err)
       setError(err.message || "Erro ao carregar veículos prontos para entrega.")
     } finally {
       setIsLoading(false)
@@ -58,7 +61,7 @@ export default function EntregarVeiculo() {
   }
 
   useEffect(() => {
-    fetchVeiculos()
+    fetchClientes()
   }, [])
 
   const formatPrice = (price: number) => {
@@ -68,8 +71,53 @@ export default function EntregarVeiculo() {
     }).format(price)
   }
 
-  const handleOpenPayment = (vehicle: APIVehicleInService) => {
-    setSelectedVehicle(vehicle)
+  // Função utilitária para extrair de forma robusta os dados do veículo do payload (suporta formato achatado ou aninhado)
+  const getVeiculoInfo = (v: any) => {
+    if (!v) return { placa: "—", marca: "", modelo: "Veículo", cor: "" };
+    
+    // Se vier aninhado dentro de um objeto "veiculo"
+    const target = v.veiculo && typeof v.veiculo === 'object' ? v.veiculo : v;
+    
+    return {
+      placa: target.placa || v.placa || "—",
+      marca: target.marca || v.marca || "",
+      modelo: target.modelo || v.modelo || "Veículo",
+      cor: target.cor || v.cor || ""
+    };
+  }
+
+  const formatPhone = (phone: string) => {
+    if (!phone) return "Não informado"
+    // Remove o DDI 55 se presente
+    let cleaned = phone.replace(/\D/g, '')
+    if (cleaned.startsWith('55') && cleaned.length > 11) {
+      cleaned = cleaned.substring(2)
+    }
+    if (cleaned.length === 11) {
+      return `(${cleaned.slice(0, 2)}) ${cleaned.slice(2, 7)}-${cleaned.slice(7)}`
+    }
+    if (cleaned.length === 10) {
+      return `(${cleaned.slice(0, 2)}) ${cleaned.slice(2, 6)}-${cleaned.slice(6)}`
+    }
+    return phone
+  }
+
+  const toggleExpanded = (idcliente: number) => {
+    setExpandedClients(prev => {
+      const next = new Set(prev)
+      if (next.has(idcliente)) {
+        next.delete(idcliente)
+      } else {
+        next.add(idcliente)
+      }
+      return next
+    })
+  }
+
+  const totalVeiculos = clientes.reduce((acc, c) => acc + c.veiculos.length, 0)
+
+  const handleOpenPayment = (client: DeliveryClient) => {
+    setSelectedClient(client)
     setPaymentStatus('pending')
     setIsPaymentDialogOpen(true)
   }
@@ -87,38 +135,46 @@ export default function EntregarVeiculo() {
     }, 2000)
   }
 
-  const handleDeliverVehicle = async () => {
-    if (selectedVehicle) {
-      const placa = selectedVehicle.veiculo?.placa || "N/A"
-      try {
-        setIsDelivering(true)
-        
-        // Chamada real ao endpoint veiculo_entregar
-        await entregarVeiculoApi(selectedVehicle.idlavagem)
+  const handleDeliverClient = async () => {
+    if (!selectedClient) return
 
-        // Sincronizar banco mockado local
-        atualizarStatusVeiculo(placa, 'entregue')
-        
-        // Remover da listagem da tela
-        setVeiculos(prev => prev.filter(v => v.idlavagem !== selectedVehicle.idlavagem))
-        
-        toast({
-          title: "Veículo Entregue",
-          description: `Veículo ${placa} foi marcado como entregue com sucesso.`,
-        })
-        setIsPaymentDialogOpen(false)
-        setSelectedVehicle(null)
-        setPaymentStatus('pending')
-      } catch (err: any) {
-        console.error("Erro ao entregar veículo:", err)
-        toast({
-          title: "Erro ao Entregar",
-          description: err.message || "Não foi possível confirmar a entrega do veículo.",
-          variant: "destructive"
-        })
-      } finally {
-        setIsDelivering(false)
+    try {
+      setIsDelivering(true)
+
+      // Mapear todos os idlavagem dos veículos do cliente que estão sendo entregues
+      const idsLavagem = selectedClient.veiculos
+        .map(v => v.idlavagem)
+        .filter((id): id is number => typeof id === 'number' && id > 0);
+
+      if (idsLavagem.length > 0) {
+        // Envia todos os IDs de lavagem em uma única chamada de array à API
+        await entregarVeiculoApi(idsLavagem);
       }
+
+      // Sincronizar banco mockado local para todos os veículos entregues
+      selectedClient.veiculos.forEach(veiculo => {
+        atualizarStatusVeiculo(veiculo.placa, 'entregue');
+      });
+
+      // Remover o cliente da listagem
+      setClientes(prev => prev.filter(c => c.idcliente !== selectedClient.idcliente))
+
+      toast({
+        title: "Veículos Entregues",
+        description: `Todos os veículos de ${selectedClient.cliente.nome} foram entregues com sucesso.`,
+      })
+      setIsPaymentDialogOpen(false)
+      setSelectedClient(null)
+      setPaymentStatus('pending')
+    } catch (err: any) {
+      console.error("Erro ao entregar veículos:", err)
+      toast({
+        title: "Erro ao Entregar",
+        description: err.message || "Não foi possível confirmar a entrega dos veículos.",
+        variant: "destructive"
+      })
+    } finally {
+      setIsDelivering(false)
     }
   }
 
@@ -134,7 +190,7 @@ export default function EntregarVeiculo() {
         {!isLoading && !error && (
           <div className="flex items-center gap-2">
             <Badge variant="secondary" className="bg-green-50 text-green-700 border-green-200">
-              {veiculos.length} veículos prontos
+              {clientes.length} {clientes.length === 1 ? 'cliente' : 'clientes'} • {totalVeiculos} {totalVeiculos === 1 ? 'veículo' : 'veículos'}
             </Badge>
           </div>
         )}
@@ -151,12 +207,12 @@ export default function EntregarVeiculo() {
             <AlertCircle className="h-12 w-12 text-red-500 mb-4" />
             <h3 className="text-lg font-semibold text-red-700 mb-2">Erro de Conexão</h3>
             <p className="text-sm text-red-600 max-w-md mb-6">{error}</p>
-            <Button onClick={fetchVeiculos} variant="outline" className="border-red-300 text-red-700 hover:bg-red-50">
+            <Button onClick={fetchClientes} variant="outline" className="border-red-300 text-red-700 hover:bg-red-50">
               Tentar Novamente
             </Button>
           </CardContent>
         </Card>
-      ) : veiculos.length === 0 ? (
+      ) : clientes.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-16">
             <Car className="h-12 w-12 text-muted-foreground/50 mb-4" />
@@ -169,90 +225,185 @@ export default function EntregarVeiculo() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {veiculos.map((item) => {
-            const placa = item.veiculo?.placa || "N/A"
-            const marca = item.veiculo?.marca || ""
-            const modelo = item.veiculo?.modelo || "Modelo Desconhecido"
-            const cor = item.veiculo?.cor || "Não informada"
-            const clienteNome = item.cliente?.nome || "Não informado"
-            const clienteTelefone = item.cliente?.telefone || "Não informado"
+        <div className="space-y-6">
+          {clientes.map((clienteData) => {
+            const isExpanded = expandedClients.has(clienteData.idcliente)
 
             return (
-              <Card key={item.idlavagem} className="border-green-200 bg-green-50/10 hover:shadow-md transition-shadow">
-                <CardHeader className="pb-4">
+              <Card key={clienteData.idcliente} className="border-green-200/60 bg-gradient-to-br from-white to-green-50/30 hover:shadow-lg transition-all duration-300">
+                {/* Cabeçalho do Cliente */}
+                <CardHeader className="pb-3">
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 bg-green-100 rounded-lg">
-                        <Car className="h-5 w-5 text-green-600" />
+                    <div className="flex items-center gap-4">
+                      <div className="p-2.5 bg-green-100 rounded-xl">
+                        <User className="h-5 w-5 text-green-700" />
                       </div>
                       <div>
-                        <CardTitle className="text-lg font-bold">
-                          {marca} {modelo}
+                        <CardTitle className="text-lg font-bold text-foreground">
+                          {clienteData.cliente.nome}
                         </CardTitle>
-                        <CardDescription className="flex items-center gap-4 text-xs font-semibold">
-                          <span className="font-mono bg-green-200/50 text-green-800 px-1.5 py-0.5 rounded">Placa: {placa}</span>
-                          <span>•</span>
-                          <span>Cor: {cor}</span>
+                        <CardDescription className="flex items-center gap-2 mt-0.5">
+                          <Phone className="h-3 w-3" />
+                          <span className="font-mono text-xs">
+                            {formatPhone(clienteData.cliente.telefone)}
+                          </span>
                         </CardDescription>
                       </div>
                     </div>
-                    <Badge className="bg-green-100 text-green-800 border-green-300">
-                      Finalizado
-                    </Badge>
+
+                    <div className="flex items-center gap-3">
+                      <div className="text-right">
+                        <p className="text-xs text-muted-foreground">Total a Pagar</p>
+                        <p className="text-xl font-bold text-green-700">
+                          {formatPrice(clienteData.totalapagar)}
+                        </p>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => toggleExpanded(clienteData.idcliente)}
+                        className="h-8 w-8"
+                      >
+                        {isExpanded ? (
+                          <ChevronUp className="h-4 w-4" />
+                        ) : (
+                          <ChevronDown className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Badge de veículos e info sempre visível */}
+                  <div className="space-y-2 mt-2">
+                    <div className="flex items-center gap-2">
+                      <Badge variant="secondary" className="bg-green-100/80 text-green-800 border-green-200 text-xs">
+                        <Car className="h-3 w-3 mr-1" />
+                        {clienteData.veiculos.length} {clienteData.veiculos.length === 1 ? 'veículo' : 'veículos'}
+                      </Badge>
+                      <Badge className="bg-green-100 text-green-800 border-green-300 text-xs">
+                        Pronto para Entrega
+                      </Badge>
+                    </div>
+                    
+                    {/* Lista rápida de veículos e placas associadas */}
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      {clienteData.veiculos.map(veiculo => {
+                        const info = getVeiculoInfo(veiculo);
+                        return (
+                          <div 
+                            key={veiculo.idveiculo} 
+                            className="flex items-center gap-1.5 text-xs bg-muted/60 px-2 py-1 rounded border border-border/40 font-medium"
+                          >
+                            <span className="font-mono bg-white text-blue-700 px-1 rounded border border-blue-100 font-semibold text-[10px]">
+                              {info.placa}
+                            </span>
+                            <span className="text-foreground/80">
+                              {info.marca} {info.modelo}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 </CardHeader>
-                
-                <CardContent className="space-y-4">
-                  {/* Client info */}
-                  <div className="flex items-center gap-4 p-3 bg-muted/50 rounded-lg">
-                    <User className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium text-sm truncate">{clienteNome}</p>
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground font-mono">
-                        <Phone className="h-3 w-3" />
-                        {clienteTelefone}
+
+                {isExpanded && (
+                  <CardContent className="space-y-4 pt-0">
+                    {/* Lista de Veículos */}
+                    <div className="space-y-3">
+                      {clienteData.veiculos.map((veiculo) => {
+                        const info = getVeiculoInfo(veiculo);
+                        return (
+                          <div
+                            key={veiculo.idveiculo}
+                            className="border border-border/60 rounded-lg p-4 bg-white/80 space-y-3"
+                          >
+                            {/* Info do veículo */}
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <div className="p-1.5 bg-blue-50 rounded-md">
+                                  <Car className="h-4 w-4 text-blue-600" />
+                                </div>
+                                <div>
+                                  <p className="font-semibold text-sm text-foreground">
+                                    {info.marca} {info.modelo}
+                                  </p>
+                                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                    <span className="font-mono bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded font-semibold">
+                                      {info.placa}
+                                    </span>
+                                    {info.cor && (
+                                      <>
+                                        <span>•</span>
+                                        <span>Cor: {info.cor}</span>
+                                      </>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            <div className="text-right">
+                              <p className="text-xs text-muted-foreground">Subtotal</p>
+                              <p className="text-base font-bold text-foreground">
+                                {formatPrice(veiculo.valor)}
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Serviços do veículo */}
+                          {veiculo.servicos && veiculo.servicos.length > 0 && (
+                            <div className="border-t pt-2">
+                              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block mb-1.5">
+                                Serviços Realizados
+                              </span>
+                              <div className="space-y-1">
+                                {veiculo.servicos.map((servico, idx) => (
+                                  <div
+                                    key={servico.idservico || idx}
+                                    className="flex items-center justify-between text-sm"
+                                  >
+                                    <div className="flex items-center gap-2">
+                                      <Badge variant="secondary" className="text-[10px] font-normal px-2 py-0.5">
+                                        {servico.nome}
+                                        {servico.quantidade && servico.quantidade > 1 ? ` (${servico.quantidade}x)` : ""}
+                                      </Badge>
+                                    </div>
+                                    <span className="font-medium text-xs text-muted-foreground">
+                                      {formatPrice(servico.valor)}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                    </div>
+
+                    <Separator />
+
+                    {/* Rodapé com total e botão de pagamento */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <DollarSign className="h-5 w-5 text-green-700" />
+                        <div>
+                          <p className="text-xs text-muted-foreground">Total do Cliente</p>
+                          <p className="text-xl font-bold text-green-700">
+                            {formatPrice(clienteData.totalapagar)}
+                          </p>
+                        </div>
                       </div>
+                      <Button
+                        onClick={() => handleOpenPayment(clienteData)}
+                        className="bg-green-600 hover:bg-green-700 text-white"
+                        size="lg"
+                      >
+                        <QrCode className="h-4 w-4 mr-2" />
+                        Processar Pagamento
+                      </Button>
                     </div>
-                  </div>
-
-                  {/* Services List */}
-                  {item.servicos && item.servicos.length > 0 && (
-                    <div className="border-t pt-3 space-y-1.5">
-                      <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block">
-                        Serviços Realizados
-                      </span>
-                      <div className="flex flex-wrap gap-1">
-                        {item.servicos.map((s) => (
-                          <Badge key={s.idservico} variant="secondary" className="text-[10px] font-normal px-2 py-0.5">
-                            {s.nome} {s.quantidade > 1 ? `(${s.quantidade}x)` : ""}
-                          </Badge>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Service details and pricing */}
-                  <div className="flex items-center justify-between p-3 bg-primary/5 rounded-lg border border-primary/10">
-                    <div className="flex items-center gap-2">
-                      <DollarSign className="h-4 w-4 text-primary" />
-                      <span className="font-medium text-sm text-foreground">Valor Total:</span>
-                    </div>
-                    <span className="text-lg font-bold text-primary">
-                      {formatPrice(item.total || 0)}
-                    </span>
-                  </div>
-
-                  {/* Action button */}
-                  <Button 
-                    onClick={() => handleOpenPayment(item)}
-                    className="w-full mt-2"
-                    size="lg"
-                  >
-                    <QrCode className="h-4 w-4 mr-2" />
-                    Processar Pagamento e Entrega
-                  </Button>
-                </CardContent>
+                  </CardContent>
+                )}
               </Card>
             )
           })}
@@ -261,20 +412,43 @@ export default function EntregarVeiculo() {
 
       {/* Payment Dialog */}
       <Dialog open={isPaymentDialogOpen} onOpenChange={setIsPaymentDialogOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Pagamento e Entrega</DialogTitle>
             <DialogDescription>
-              {selectedVehicle && `${selectedVehicle.veiculo?.marca || ""} ${selectedVehicle.veiculo?.modelo || ""} - ${selectedVehicle.veiculo?.placa || "N/A"}`}
+              {selectedClient && `Cliente: ${selectedClient.cliente.nome}`}
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-6">
-            {/* Payment amount */}
+          <div className="space-y-4">
+            {/* Resumo dos veículos no diálogo */}
+            {selectedClient && (
+              <div className="space-y-2 max-h-[200px] overflow-y-auto">
+                {selectedClient.veiculos.map((veiculo) => {
+                  const info = getVeiculoInfo(veiculo);
+                  return (
+                    <div key={veiculo.idveiculo} className="flex items-center justify-between p-2 bg-muted/50 rounded-md text-sm">
+                      <div className="flex items-center gap-2">
+                        <Car className="h-3.5 w-3.5 text-muted-foreground" />
+                        <span className="font-mono text-xs font-semibold">{info.placa}</span>
+                        <span className="text-muted-foreground text-xs">
+                          {info.marca} {info.modelo}
+                        </span>
+                      </div>
+                      <span className="font-semibold text-xs">{formatPrice(veiculo.valor)}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            <Separator />
+
+            {/* Valor total a pagar */}
             <div className="text-center">
-              <p className="text-sm text-muted-foreground mb-2">Valor a pagar:</p>
-              <p className="text-3xl font-bold text-primary">
-                {selectedVehicle && formatPrice(selectedVehicle.total || 0)}
+              <p className="text-sm text-muted-foreground mb-1">Total a Pagar:</p>
+              <p className="text-3xl font-bold text-green-700">
+                {selectedClient && formatPrice(selectedClient.totalapagar)}
               </p>
             </div>
 
@@ -283,9 +457,9 @@ export default function EntregarVeiculo() {
             {/* Payment section */}
             {paymentStatus === 'pending' && (
               <div className="space-y-4">
-                <QRCodeMock value={`payment-${selectedVehicle?.veiculo?.placa || "N/A"}-${Date.now()}`} />
+                <QRCodeMock value={`payment-${selectedClient?.idcliente}-${Date.now()}`} />
                 <div className="text-center">
-                  <Button onClick={simulatePayment} size="lg" className="w-full">
+                  <Button onClick={simulatePayment} size="lg" className="w-full bg-green-600 hover:bg-green-700">
                     Simular Pagamento
                   </Button>
                   <p className="text-xs text-muted-foreground mt-2">
@@ -297,7 +471,7 @@ export default function EntregarVeiculo() {
 
             {paymentStatus === 'processing' && (
               <div className="flex flex-col items-center justify-center p-8">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mb-4"></div>
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mb-4"></div>
                 <p className="text-lg font-medium">Processando pagamento...</p>
                 <p className="text-sm text-muted-foreground">Aguarde a confirmação</p>
               </div>
@@ -307,11 +481,11 @@ export default function EntregarVeiculo() {
               <div className="space-y-4">
                 <PaymentSuccess />
                 <div className="text-center space-y-2">
-                  <Button 
-                    onClick={handleDeliverVehicle} 
+                  <Button
+                    onClick={handleDeliverClient}
                     disabled={isDelivering}
-                    size="lg" 
-                    className="w-full"
+                    size="lg"
+                    className="w-full bg-green-600 hover:bg-green-700"
                   >
                     {isDelivering ? (
                       <>
@@ -321,12 +495,12 @@ export default function EntregarVeiculo() {
                     ) : (
                       <>
                         <CheckCircle className="h-4 w-4 mr-2" />
-                        Confirmar Entrega do Veículo
+                        Confirmar Entrega dos Veículos
                       </>
                     )}
                   </Button>
                   <p className="text-xs text-muted-foreground">
-                    Clique para finalizar a entrega
+                    Clique para finalizar a entrega de todos os veículos do cliente
                   </p>
                 </div>
               </div>
