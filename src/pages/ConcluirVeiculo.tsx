@@ -7,6 +7,15 @@ import { atualizarStatusVeiculo } from "@/data/mockData";
 import { CheckCircle, Clock, Car, Loader2, User, Phone, DollarSign, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 
+const parseDatabaseDate = (dateStr?: string): Date => {
+  if (!dateStr) return new Date();
+  if (dateStr.includes('Z') || (dateStr.includes('-') && dateStr.includes('T'))) {
+    return new Date(dateStr);
+  }
+  const formatted = dateStr.replace(' ', 'T');
+  return new Date(`${formatted}Z`);
+};
+
 export default function ConcluirVeiculo() {
   const [veiculos, setVeiculos] = useState<APIVehicleInService[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -25,7 +34,7 @@ export default function ConcluirVeiculo() {
   const getActualMinutes = (entradaStr: string): number => {
     if (!entradaStr) return 0;
     try {
-      const entradaDate = new Date(entradaStr);
+      const entradaDate = parseDatabaseDate(entradaStr);
       if (isNaN(entradaDate.getTime())) return 0;
       const diffMs = currentTime.getTime() - entradaDate.getTime();
       return Math.max(0, Math.floor(diffMs / 60000));
@@ -136,7 +145,7 @@ export default function ConcluirVeiculo() {
   const formatTime = (timeStr: string) => {
     if (!timeStr) return "-";
     try {
-      const date = new Date(timeStr);
+      const date = parseDatabaseDate(timeStr);
       if (isNaN(date.getTime())) return timeStr;
       return date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
     } catch (e) {

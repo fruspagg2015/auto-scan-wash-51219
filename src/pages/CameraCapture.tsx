@@ -115,7 +115,7 @@ const CameraCapture = () => {
         imagem: null,
         hora_chegada: hora,
         cliente: placaData.cliente ? {
-          id: placaData.cliente.idcliente,
+          id: placaData.cliente.id || placaData.cliente.idcliente || 0,
           nome: placaData.cliente.nome,
           telefone: placaData.cliente.telefone,
           cadastrado: true

@@ -15,7 +15,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { listVehiclesInServiceApi, getDashboardDataApi, APIDashboardData } from "@/services/clientApi";
+import { listVehiclesInServiceApi, getDashboardDataApi, listServicesApi, APIDashboardData } from "@/services/clientApi";
 import {
   Table,
   TableBody,
@@ -33,6 +33,8 @@ import {
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { BarChart, Bar, XAxis, YAxis, PieChart, Pie, Cell } from "recharts";
 import { useNavigate } from "react-router-dom";
+import { Carousel, CarouselContent, CarouselItem } from "@/components/ui/carousel";
+import { cn } from "@/lib/utils";
 
 // Mapeamento dinâmico dos dados do dashboard do backend
 
@@ -47,8 +49,27 @@ interface VehicleInService {
   tempoEstimado: string;
   tipoAtendimento: 'fila' | 'agendado';
   dataAgendamento?: string;
+  entrada?: string;
+  minutos?: number;
+  idplaca?: number;
+  cliente?: {
+    id?: number;
+    idcliente?: number;
+    nome: string;
+    telefone: string;
+    email?: string;
+    cadastrado: boolean;
+  };
 }
 
+const parseDatabaseDate = (dateStr?: string): Date => {
+  if (!dateStr) return new Date();
+  if (dateStr.includes('Z') || (dateStr.includes('-') && dateStr.includes('T'))) {
+    return new Date(dateStr);
+  }
+  const formatted = dateStr.replace(' ', 'T');
+  return new Date(`${formatted}Z`);
+};
 
 const vehiclesInServiceInitial: VehicleInService[] = [];
 
@@ -63,6 +84,181 @@ const getStatusBadge = (status: string) => {
     default:
       return <Badge variant="outline">{status}</Badge>;
   }
+};
+
+const VehicleTimer = ({ entrada, minutos }: { entrada?: string; minutos?: number }) => {
+  const [timeLeftStr, setTimeLeftStr] = useState<string>("");
+  const [isOvertime, setIsOvertime] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (!entrada || !minutos) {
+      setTimeLeftStr("-");
+      return;
+    }
+
+    const start = parseDatabaseDate(entrada).getTime();
+    const durationMs = minutos * 60 * 1000;
+    const target = start + durationMs;
+
+    const formatTime = (totalSeconds: number): string => {
+      const hours = Math.floor(totalSeconds / 3600);
+      const minutes = Math.floor((totalSeconds % 3600) / 60);
+      const seconds = totalSeconds % 60;
+
+      return [
+        String(hours).padStart(2, '0'),
+        String(minutes).padStart(2, '0'),
+        String(seconds).padStart(2, '0')
+      ].join(':');
+    };
+
+    const updateTimer = () => {
+      const now = Date.now();
+      const diff = target - now;
+
+      if (diff > 0) {
+        // Dentro do tempo: mostra HH:MM:SS restante
+        const totalSecs = Math.floor(diff / 1000);
+        setTimeLeftStr(formatTime(totalSecs));
+        setIsOvertime(false);
+      } else {
+        // Tempo esgotado: mostra tempo ultrapassado como -HH:MM:SS
+        const absDiff = Math.abs(diff);
+        const totalSecs = Math.floor(absDiff / 1000);
+        setTimeLeftStr(`-${formatTime(totalSecs)}`);
+        setIsOvertime(true);
+      }
+    };
+
+    updateTimer();
+    const interval = setInterval(updateTimer, 1000);
+    return () => clearInterval(interval);
+  }, [entrada, minutos]);
+
+  if (!entrada || !minutos) return <span>-</span>;
+
+  return (
+    <span className={cn(
+      "font-mono font-bold text-xs tracking-wider px-2 py-0.5 rounded shadow-sm transition-all duration-300",
+      isOvertime 
+        ? "bg-rose-100 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400 border border-rose-200 dark:border-rose-800/60 animate-pulse font-extrabold text-[13px]" 
+        : "bg-emerald-100 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/60"
+    )}>
+      {timeLeftStr}
+    </span>
+  );
+};
+
+const VehicleCard = ({ 
+  vehicle, 
+  navigate,
+  getStatusBadge
+}: { 
+  vehicle: VehicleInService; 
+  navigate: any;
+  getStatusBadge: (status: string) => React.ReactNode;
+}) => {
+  return (
+    <Card className="border border-border/60 shadow-sm hover:shadow-md transition-shadow duration-200 h-full flex flex-col justify-between min-h-[220px]">
+      <CardContent className="p-4 flex flex-col justify-between h-full">
+        <div>
+          {/* Top Header Row */}
+          <div className="flex items-start justify-between mb-3 gap-2">
+            <div>
+              <div className="flex flex-wrap items-center gap-2 mb-1">
+                <span className="font-mono font-bold text-base tracking-wider bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 px-2 py-0.5 rounded border border-slate-300 dark:border-slate-700 shadow-sm whitespace-nowrap">
+                  {vehicle.placa}
+                </span>
+                {vehicle.tipoAtendimento === 'agendado' && (
+                  <Badge variant="outline" className="border-wash-blue text-wash-blue bg-wash-blue/5 text-[10px] py-0.5 px-1.5 font-semibold flex-shrink-0">
+                    <Calendar className="h-2.5 w-2.5 mr-1" />
+                    Agendado
+                  </Badge>
+                )}
+              </div>
+              <div className="text-sm font-semibold text-slate-700 dark:text-slate-200 flex items-center gap-1.5 mt-2">
+                <Car className="h-4 w-4 text-slate-500 flex-shrink-0" />
+                <span className="truncate max-w-[150px]">{vehicle.modelo}</span>
+                {vehicle.cor && (
+                  <span className="text-xs font-normal text-muted-foreground whitespace-nowrap">
+                    ({vehicle.cor})
+                  </span>
+                )}
+              </div>
+            </div>
+            
+            {/* Dropdown Actions */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="sm" className="h-8 w-8 p-0 flex-shrink-0">
+                  <MoreHorizontal className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="bg-white z-50">
+                <DropdownMenuItem onClick={() => navigate("/vehicle-details", { state: vehicle })}>
+                  Ver Detalhes
+                </DropdownMenuItem>
+                <DropdownMenuItem>Finalizar</DropdownMenuItem>
+                <DropdownMenuItem className="text-red-600">Cancelar</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+
+          {/* Services List Tag style */}
+          <div className="mb-4">
+            <div className="text-xs text-muted-foreground mb-1.5 font-medium">Serviços:</div>
+            <div className="flex flex-wrap gap-1">
+              {vehicle.servico.split(',').map((serv, index) => (
+                <span 
+                  key={index}
+                  className="text-xs font-medium bg-wash-blue/10 text-wash-blue px-2 py-0.5 rounded-full border border-wash-blue/20"
+                >
+                  {serv.trim()}
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Footer Info Row */}
+        <div className="border-t border-slate-100 dark:border-slate-800 pt-3 mt-auto space-y-2">
+          <div className="flex items-center justify-between text-xs">
+            <div className="flex items-center gap-1 text-muted-foreground">
+              <Clock className="h-3.5 w-3.5" />
+              <span>Status:</span>
+            </div>
+            {getStatusBadge(vehicle.status)}
+          </div>
+
+          <div className="flex items-center justify-between text-xs">
+            <div className="flex items-center gap-1 text-muted-foreground">
+              <Clock className="h-3.5 w-3.5" />
+              <span>Chegada:</span>
+            </div>
+            <span className="font-semibold text-slate-700 dark:text-slate-200">{vehicle.horaChegada}</span>
+          </div>
+
+          {vehicle.minutos !== undefined && vehicle.minutos > 0 ? (
+            <div className="flex items-center justify-between text-xs bg-slate-50 dark:bg-slate-800/50 p-1.5 rounded">
+              <div className="flex items-center gap-1 text-slate-600 dark:text-slate-300">
+                <Clock className="h-3.5 w-3.5 text-amber-500" />
+                <span>Tempo restante:</span>
+              </div>
+              <VehicleTimer entrada={vehicle.entrada} minutos={vehicle.minutos} />
+            </div>
+          ) : vehicle.tempoEstimado !== "-" ? (
+            <div className="flex items-center justify-between text-xs bg-slate-50 dark:bg-slate-800/50 p-1.5 rounded">
+              <div className="flex items-center gap-1 text-slate-600 dark:text-slate-300">
+                <Clock className="h-3.5 w-3.5 text-amber-500" />
+                <span>Tempo estimado:</span>
+              </div>
+              <span className="font-bold text-amber-600 dark:text-amber-400">{vehicle.tempoEstimado}</span>
+            </div>
+          ) : null}
+        </div>
+      </CardContent>
+    </Card>
+  );
 };
 
 const Dashboard = () => {
@@ -125,22 +321,59 @@ const Dashboard = () => {
     const fetchDashboardData = async () => {
       try {
         setIsLoading(true);
-        const data = await getDashboardDataApi();
+        // Busca os dados do dashboard e a lista de serviços do cadastro em paralelo
+        const [data, servicesData] = await Promise.all([
+          getDashboardDataApi(),
+          listServicesApi().catch((err) => {
+            console.error('Error fetching services from registry:', err);
+            return [];
+          })
+        ]);
         
         if (data) {
           setDashboardData(data);
           
-          let formattedVehicles: VehicleInService[] = (data.cliente_ematendimento?.lista || []).map((order) => ({
-            id: order.idlavagem,
-            placa: order.veiculo?.placa || 'N/A',
-            modelo: `${order.veiculo?.marca || ''} ${order.veiculo?.modelo || ''}`.trim() || 'N/A',
-            cor: order.veiculo?.cor && order.veiculo.cor !== '-' ? order.veiculo.cor : '',
-            servico: order.servicos?.map((s: any) => s.nome).join(', ') || 'N/A',
-            status: mapStatus(order.status),
-            horaChegada: new Date(order.entrada).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-            tempoEstimado: order.minutos ? `${order.minutos} min` : '-',
-            tipoAtendimento: 'fila'
-          }));
+          // Mapeia idservico -> tempoestimado
+          const serviceDurationMap = new Map<number, number>();
+          (servicesData || []).forEach((s) => {
+            serviceDurationMap.set(s.idservico, s.tempoestimado || 0);
+          });
+
+          let formattedVehicles: VehicleInService[] = (data.cliente_ematendimento?.lista || []).map((order) => {
+            // Calcula o tempo que o serviço demanda baseado no cadastro (multiplicando pela quantidade)
+            let totalMinutesFromRegistry = order.servicos?.reduce((acc: number, s: any) => {
+              const duration = serviceDurationMap.get(s.idservico) || 0;
+              const qty = s.quantidade || 1;
+              return acc + (duration * qty);
+            }, 0) || 0;
+
+            // Fallback caso não encontre duração no cadastro para os serviços vinculados
+            if (totalMinutesFromRegistry === 0 && order.minutos) {
+              totalMinutesFromRegistry = order.minutos;
+            }
+
+            return {
+              id: order.idlavagem,
+              placa: order.veiculo?.placa || 'N/A',
+              modelo: `${order.veiculo?.marca || ''} ${order.veiculo?.modelo || ''}`.trim() || 'N/A',
+              cor: order.veiculo?.cor && order.veiculo.cor !== '-' ? order.veiculo.cor : '',
+              servico: order.servicos?.map((s: any) => s.nome).join(', ') || 'N/A',
+              status: mapStatus(order.status),
+              horaChegada: parseDatabaseDate(order.entrada).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+              tempoEstimado: totalMinutesFromRegistry ? `${totalMinutesFromRegistry} min` : '-',
+              tipoAtendimento: 'fila',
+              entrada: order.entrada,
+              minutos: totalMinutesFromRegistry,
+              idplaca: order.veiculo?.idveiculo,
+              cliente: order.cliente ? {
+                id: order.cliente.idcliente || (order.cliente as any).id || 0,
+                idcliente: order.cliente.idcliente || (order.cliente as any).id || 0,
+                nome: order.cliente.nome,
+                telefone: order.cliente.telefone,
+                cadastrado: true
+              } : undefined
+            };
+          });
 
           // Se houver novo agendamento de localState que por algum motivo não carregou da API
           if (location.state?.novoAgendamento) {
@@ -159,7 +392,9 @@ const Dashboard = () => {
                   : novoAgendamento.horaChegada,
                 tempoEstimado: `${novoAgendamento.tempoEstimado} min`,
                 tipoAtendimento: novoAgendamento.tipoAtendimento,
-                dataAgendamento: novoAgendamento.dataAgendamento
+                dataAgendamento: novoAgendamento.dataAgendamento,
+                entrada: novoAgendamento.tipoAtendimento === 'agendado' ? novoAgendamento.dataAgendamento : new Date().toISOString(),
+                minutos: Number(novoAgendamento.tempoEstimado) || 0
               };
               formattedVehicles = [...formattedVehicles, novoVeiculo];
             }
@@ -349,138 +584,35 @@ const Dashboard = () => {
             </CardTitle>
           </CardHeader>
           <CardContent className="p-3 sm:p-6">
-            {/* Desktop Table */}
-            <div className="hidden md:block">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Placa</TableHead>
-                    <TableHead>Veículo</TableHead>
-                    <TableHead>Serviço</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Chegada</TableHead>
-                    <TableHead>Tempo Est.</TableHead>
-                    <TableHead className="w-12"></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
+            {vehiclesInService.length === 0 ? (
+              <div className="flex flex-col items-center justify-center p-8 text-center text-muted-foreground border border-dashed rounded-lg bg-muted/20">
+                <Car className="h-10 w-10 text-muted-foreground/60 mb-2 stroke-[1.5]" />
+                <p className="font-medium text-sm">Nenhum veículo em atendimento</p>
+                <p className="text-xs text-muted-foreground/80 mt-1">Todos os veículos foram concluídos ou não há registros no momento.</p>
+              </div>
+            ) : (
+              <>
+                {/* Desktop Grid of Cards */}
+                <div className="hidden md:grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                   {vehiclesInService.map((vehicle) => (
-                    <TableRow key={vehicle.id}>
-                      <TableCell className="font-medium">
-                        <div className="flex items-center gap-2">
-                          {vehicle.placa}
-                          {vehicle.tipoAtendimento === 'agendado' && (
-                            <Badge variant="outline" className="border-wash-blue text-wash-blue text-xs">
-                              <Calendar className="h-3 w-3 mr-1" />
-                              Agendado
-                            </Badge>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div>
-                          <div className="font-medium">{vehicle.modelo}</div>
-                          {vehicle.cor ? (
-                            <div className="text-xs text-muted-foreground/80">{vehicle.cor}</div>
-                          ) : (
-                            <div className="text-[11px] text-muted-foreground/50 italic">Cor não informada</div>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>{vehicle.servico}</TableCell>
-                      <TableCell>{getStatusBadge(vehicle.status)}</TableCell>
-                      <TableCell>{vehicle.horaChegada}</TableCell>
-                      <TableCell>{vehicle.tempoEstimado}</TableCell>
-                      <TableCell>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="sm">
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="bg-white z-50">
-                            <DropdownMenuItem onClick={() => navigate("/vehicle-details", { state: vehicle })}>
-                              Ver Detalhes
-                            </DropdownMenuItem>
-                            <DropdownMenuItem>Finalizar</DropdownMenuItem>
-                            <DropdownMenuItem className="text-red-600">Cancelar</DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
-                    </TableRow>
+                    <VehicleCard key={vehicle.id} vehicle={vehicle} navigate={navigate} getStatusBadge={getStatusBadge} />
                   ))}
-                </TableBody>
-              </Table>
-            </div>
+                </div>
 
-            {/* Mobile Cards */}
-            <div className="md:hidden space-y-3">
-              {vehiclesInService.map((vehicle) => (
-                <Card key={vehicle.id} className="border border-border/50">
-                  <CardContent className="p-4">
-                    <div className="flex items-start justify-between mb-3">
-                      <div>
-                        <div className="flex items-center gap-2 mb-1">
-                          <div className="font-bold text-lg text-wash-blue">{vehicle.placa}</div>
-                          {vehicle.tipoAtendimento === 'agendado' && (
-                            <Badge variant="outline" className="border-wash-blue text-wash-blue text-xs">
-                              <Calendar className="h-3 w-3 mr-1" />
-                              Agendado
-                            </Badge>
-                          )}
-                        </div>
-                        <div className="text-sm text-muted-foreground">
-                          {vehicle.modelo}
-                          {vehicle.cor && (
-                            <span className="text-xs text-muted-foreground/70 ml-1.5">
-                              • {vehicle.cor}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="sm">
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="bg-white z-50">
-                          <DropdownMenuItem onClick={() => navigate("/vehicle-details", { state: vehicle })}>
-                            Ver Detalhes
-                          </DropdownMenuItem>
-                          <DropdownMenuItem>Finalizar</DropdownMenuItem>
-                          <DropdownMenuItem className="text-red-600">Cancelar</DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-muted-foreground">Serviço:</span>
-                        <span className="text-sm font-medium">{vehicle.servico}</span>
-                      </div>
-
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-muted-foreground">Status:</span>
-                        {getStatusBadge(vehicle.status)}
-                      </div>
-
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-muted-foreground">Chegada:</span>
-                        <span className="text-sm font-medium">{vehicle.horaChegada}</span>
-                      </div>
-
-                      {vehicle.tempoEstimado !== "-" && (
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm text-muted-foreground">Tempo estimado:</span>
-                          <span className="text-sm font-medium">{vehicle.tempoEstimado}</span>
-                        </div>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
+                {/* Mobile Cards Carousel */}
+                <div className="md:hidden">
+                  <Carousel opts={{ align: "start" }} className="w-full">
+                    <CarouselContent className="-ml-2">
+                      {vehiclesInService.map((vehicle) => (
+                        <CarouselItem key={vehicle.id} className="pl-2 basis-[85%] sm:basis-[70%]">
+                          <VehicleCard vehicle={vehicle} navigate={navigate} getStatusBadge={getStatusBadge} />
+                        </CarouselItem>
+                      ))}
+                    </CarouselContent>
+                  </Carousel>
+                </div>
+              </>
+            )}
           </CardContent>
         </Card>
       </div>

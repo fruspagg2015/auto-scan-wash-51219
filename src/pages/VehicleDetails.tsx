@@ -28,6 +28,7 @@ interface VehicleData {
   idplaca?: number;
   cliente?: {
     id?: number;
+    idcliente?: number;
     nome: string;
     telefone: string;
     email?: string;
@@ -52,6 +53,10 @@ const VehicleDetails = () => {
   const [dataAgendamento, setDataAgendamento] = useState<Date>();
   const [horaAgendamento, setHoraAgendamento] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    console.log("VehicleDetails vehicleData on mount:", vehicleData);
+  }, [vehicleData]);
 
   useEffect(() => {
     const fetchServicos = async () => {
@@ -96,15 +101,8 @@ const VehicleDetails = () => {
     if (servicosSelecionados.length === 0) return;
     if (!tipoAtendimento) return;
 
-    if (!vehicleData.cliente?.id) {
-      toast.error("Erro: Cliente não identificado. Volte e registre o cliente.");
-      return;
-    }
-    
-    if (!vehicleData.idplaca) {
-      toast.error("Erro: Veículo não identificado no banco de dados.");
-      return;
-    }
+    const resolvedClienteId = Number(vehicleData.cliente?.id || vehicleData.cliente?.idcliente || 0);
+    const resolvedVeiculoId = Number(vehicleData.idplaca || 0);
 
     setIsSubmitting(true);
 
@@ -128,8 +126,8 @@ const VehicleDetails = () => {
       }
 
       await addServiceToClientApi({
-        idcliente: vehicleData.cliente.id,
-        idveiculo: vehicleData.idplaca,
+        idcliente: resolvedClienteId,
+        idveiculo: resolvedVeiculoId,
         tipo_atendimento: tipoAtendimento as 'fila' | 'agendado',
         data_agendamento: dataAgendamentoStr,
         observacao_geral: "",

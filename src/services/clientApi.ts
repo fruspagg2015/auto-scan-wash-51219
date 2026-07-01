@@ -146,7 +146,7 @@ export async function listClientsApi(nomeFilter: string = ""): Promise<BackendCl
 /**
  * Salva ou atualiza um cliente no novo endpoint da API.
  */
-export async function saveClientApi(clientData: ClientSavePayload): Promise<void> {
+export async function saveClientApi(clientData: ClientSavePayload): Promise<any> {
   const { token, idsessao } = getAuthData();
   const BASE_URL = import.meta.env.DEV ? '' : 'https://nexus.frconnect.com.br';
   const url = `${BASE_URL}/carwash/v1/services/cliente_salvar`;

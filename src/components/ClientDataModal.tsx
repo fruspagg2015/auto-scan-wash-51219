@@ -140,8 +140,11 @@ export const ClientDataModal: React.FC<ClientDataModalProps> = ({
 
       // Envia para o novo endpoint da API
       const resultPayload = await saveClientApi(payload);
+      console.log("ClientDataModal saveClientApi resultPayload:", resultPayload);
+      console.log("ClientDataModal current vehicleData:", vehicleData);
       
-      const clienteId = resultPayload?.idcliente || vehicleData?.cliente?.id || 0;
+      const clienteId = (resultPayload as any)?.idcliente || (resultPayload as any)?.id || vehicleData?.cliente?.id || (vehicleData?.cliente as any)?.idcliente || 0;
+      console.log("ClientDataModal resolved clienteId:", clienteId);
 
       // 3. Retornar dados completos
       const completeData = {
