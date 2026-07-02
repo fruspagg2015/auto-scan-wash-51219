@@ -497,7 +497,7 @@ const Dashboard = () => {
                 <div>
                   <p className="text-[11px] sm:text-xs font-semibold text-muted-foreground uppercase tracking-wider">Tempo Médio</p>
                   <h3 className="text-2xl sm:text-3xl font-extrabold text-wash-blue mt-1">
-                    {isLoading ? "..." : `${dashboardData?.resumo.tempo_medio ? Math.round(dashboardData.resumo.tempo_medio) : 0}min`}
+                    {isLoading ? "..." : (dashboardData?.resumo.tempo_medio ?? "00:00")}
                   </h3>
                   <p className="text-[10px] sm:text-xs text-wash-green font-semibold mt-1">Tempo médio/veículo</p>
                 </div>

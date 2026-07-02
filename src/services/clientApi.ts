@@ -611,7 +611,7 @@ export async function entregarVeiculoApi(idlavagem: number | number[]): Promise<
 
 export interface APIDashboardResumo {
   carros_hoje: number;
-  tempo_medio: number;
+  tempo_medio: string;
   receitas_hoje: number;
   em_atendimento: number;
 }
